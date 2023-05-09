@@ -1,3 +1,6 @@
+library(tidyverse)
+source(here::here('analysis', '00_prep-example-data.R'))
+
 qb <- dat |>
   filter(str_detect(survey_abbrev, "HBLL OUT N")) %>% 
   filter(species_common_name == "quillback rockfish")
