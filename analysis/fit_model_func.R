@@ -161,14 +161,17 @@ fit_models <- function(
 # }
 
 # -------
-get_pred_list <- function(fit_list, newdata, newdata_extra_time = NULL) {
-  fit_list %>% 
-  #purrr::map(., function(.x) {
-  furrr::future_map(., function(.x) {
-    newdata <- newdata
+get_pred_list <- function(fit_list, newdata) {
+  fit_list %>%
+  purrr::map(., function(.x) {
     if (inherits(.x, "sdmTMB")) {
-      if(!is.null(.x$extra_time)) newdata <- newdata_extra_time
-      out <- predict(.x, newdata = newdata, return_tmb_object = TRUE)
+      newdata <- nd_extra_time %>%
+        filter(survey %in% unique(.x$data$survey_abbrev),
+               year %in% unique(.x$data$year)
+        ) %>%
+        droplevels()
+      out <- predict(.x, newdata = newdata, return_tmb_object = TRUE, extra_time = .x$extra_time)
+      out$newdata_input <- newdata
     } else {
       out <- NA
     }
@@ -177,10 +180,9 @@ get_pred_list <- function(fit_list, newdata, newdata_extra_time = NULL) {
 }
 
 get_index_list <- function(pred_list) {
-  #purrr::map(pred_list, function(.x) {
-  furrr::future_map(pred_list, function(.x) {
+  purrr::map(pred_list, function(.x) {
     if (length(.x) > 1) {
-      get_index(.x, bias_correct = TRUE, area = .x$data$area)
+      out <- get_index(.x, bias_correct = TRUE, area = .x$newdata_input$area)
     } else {
       out <- NA  # keep empty fits as visual cue that these did not fit when plotting
     }
@@ -190,7 +192,7 @@ get_index_list <- function(pred_list) {
 mk_index_df <- function(index_list) {
   enframe(index_list) %>% 
   unnest(col = "value") %>% 
-  separate(col = 'name', into = c('id', 'species'), sep = ":") %>% 
+  separate(col = 'name', into = c('id', 'group'), sep = ":") %>%
   mutate(id = as.numeric(id)) %>% 
   right_join(., model_lookup)
 }
