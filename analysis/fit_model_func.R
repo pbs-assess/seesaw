@@ -27,7 +27,10 @@ fit_models <- function(
 
   missing_years <- NULL
   if (use_extra_time) {
-    missing_years <- sdmTMB:::find_missing_time(dat$year)
+    #missing_years <- sdmTMB:::find_missing_time(dat$year)
+    dat_years <- unique(dat$year)
+    all_years <- min(dat$year):max(dat$year)
+    missing_years <- all_years[!(all_years%in% dat_years)]
     message(cat("\t- Filling in extra_time with:", missing_years, "\n"))
   }
 
