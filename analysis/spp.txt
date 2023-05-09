@@ -1,0 +1,101 @@
+species
+# abyssal skate
+# alaska skate
+# aleutian skate
+arrowtooth flounder
+# aurora rockfish
+# basking shark
+# big skate
+# bigfin eelpout
+# bigmouth sculpin
+# black eelpout
+# black rockfish
+# blackbelly eelpout
+# blackfin sculpin
+# blackgill rockfish
+# blacktail snailfish
+# blue shark
+# bluntnose sixgill shark
+# bocaccio
+# broad skate
+# brown cat shark
+# buffalo sculpin
+# butter sole
+# c-o sole
+# cabezon
+# california grenadier
+# canary rockfish
+# chilipepper
+# china rockfish
+# copper rockfish
+# curlfin sole
+# darkblotched rockfish
+# deacon rockfish
+# deepsea sole
+# dover sole
+# dusky rockfish
+# dwarf wrymouth
+# english sole
+# flathead sole
+# giant grenadier
+# giant wrymouth
+# great sculpin
+# greenstriped rockfish
+# harlequin rockfish
+# kelp greenling
+# lingcod
+# longnose skate
+# longspine thornyhead
+# north pacific spiny dogfish
+# pacific cod
+# pacific flatnose
+# pacific grenadier
+# pacific hake
+# pacific halibut
+# pacific ocean perch
+# pacific sand lance
+# pacific sanddab
+# pacific sleeper shark
+# pacific staghorn sculpin
+# pacific tomcod
+# pearly prickleback
+# petrale sole
+# pygmy rockfish
+# quillback rockfish
+# ragfish
+# redbanded rockfish
+# redstripe rockfish
+# rex sole
+# rosethorn rockfish
+# rougheye/blackspotted rockfish complex
+# roughtail skate
+# sablefish
+# salmon shark
+# sand sole
+# sandpaper skate
+# sharpchin rockfish
+# shortfin eelpout
+# shortraker rockfish
+# shortspine thornyhead
+# silvergray rockfish
+# slender sole
+# southern rock sole
+# spinyhead sculpin
+# splitnose rockfish
+# spotfin sculpin
+# spotted ratfish
+# starry flounder
+# stripetail rockfish
+# thornback sculpin
+# threadfin grenadier
+# threadfin sculpin
+# tiger rockfish
+# tope shark
+# vermilion rockfish
+# walleye pollock
+# whitespotted greenling
+# widow rockfish
+# wolf eel
+# yelloweye rockfish
+# yellowmouth rockfish
+# yellowtail rockfish
