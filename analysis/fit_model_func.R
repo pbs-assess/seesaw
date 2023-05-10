@@ -67,9 +67,7 @@ fit_models <- function(
       control = ctrl
     )
   )
-
-
-  model_ids <- c(model_ids, "st = 'rw'")
+  model_ids <- c(model_ids, "st IID covariate")
   i <- i + 1
 
   cli::cli_inform("\tFitting 3: st IID s(year)")
@@ -83,7 +81,7 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st IID s(year)")
   i <- i + 1
 
   cli::cli_inform("\tFitting 4: st IID no covariate as.factor year")
@@ -98,7 +96,7 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st IID no covariate as.factor year")
   i <- i + 1
 
   cli::cli_inform("\tFitting 5: st time_varying RW")
@@ -115,7 +113,7 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st time_varying RW")
   i <- i + 1
 
   cli::cli_inform("\tFitting 6: st (1|year)")
@@ -130,7 +128,7 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st (1|year)")
   i <- i + 1
 
   cli::cli_inform("\tFitting 7: spatial only")
@@ -145,7 +143,7 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "spatial only")
   i <- i + 1
 
   cli::cli_inform("\tFitting 8: st (1 | region)")
@@ -160,7 +158,7 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st (1 | region)")
 
   names(fits) <- paste(model_ids, data_subset, sep = ":")
   fits
