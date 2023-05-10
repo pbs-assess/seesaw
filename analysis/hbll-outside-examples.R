@@ -1,5 +1,5 @@
 library(tidyverse)
-library(gfplot)
+# library(gfplot)
 library(sdmTMB)
 library(beepr)
 library(patchwork)
@@ -30,16 +30,17 @@ outside_nd <-
 # Yelloweye outside all
 # ------------------------------------------------------------------------------
 outside_ye_dat <- dat %>%
-  filter(str_detect(survey_abbrev, "HBLL OUT")) %>% 
-  filter(species_common_name %in% c('yelloweye rockfish')) %>% 
-  split(f = .$species_common_name) %>%
-  map(~.x %>% mutate(data_subset = paste(species_common_name, 'Stitched N/S', sep = "-")))
+  filter(str_detect(survey_abbrev, "HBLL OUT")) %>%
+  filter(species_common_name %in% c('yelloweye rockfish')) %>%
+  mutate(data_subset = paste(species_common_name, 'Stitched N/S', sep = "-")) %>%
+  split(f = .$species_common_name)
 
-future::plan(future::multisession, workers = 5) # or whatever number
+# future::plan(future::multisession, workers = 5) # or whatever number
 fits1 <- outside_ye_dat %>%
-  furrr::future_map(fit_models, catch = "density_ppkm2", data_subset = NULL) %>%
+  # furrr::future_map(fit_models, catch = "density_ppkm2", silent = FALSE) %>%
+  purrr::map(fit_models, catch = "density_ppkm2", silent = FALSE) %>%
   list_flatten(name_spec = "{inner}")
-future::plan(future::sequential)
+# future::plan(future::sequential)
 
 fits_cleaned1 <- fits1 %>%
   map(check_sanity)  # omit plots made from models that did not pass sanity check
@@ -59,11 +60,13 @@ ggplot(data = index_df, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
   geom_ribbon(alpha = 0.20, colour = NA) +
   scale_colour_manual(values = c("#66C2A5", "#FC8D62"), na.translate = FALSE) +
   labs(colour = "Sampled region") +
-  facet_wrap(species ~ fct_reorder(desc, order), nrow = 1L, scales = "free_y") +
+  facet_wrap(species ~ fct_reorder(desc, order), nrow = 2L, scales = "free_y") +
   ggtitle("Stitched N/S")
 
+p1
 # Yelloweye outside split N/S
 # ------------------------------------------------------------------------------
+if (FALSE) {
 outside_test_dat <- dat %>%
   filter(str_detect(survey_abbrev, "HBLL OUT")) %>%
   filter(species_common_name %in% c('yelloweye rockfish')) %>%
@@ -98,3 +101,4 @@ ggplot(data = index_df2, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
   ggtitle("Separate N/S")
 
 (p1 / p2) + plot_layout(heights = c(1, 2))
+}

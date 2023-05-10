@@ -8,8 +8,8 @@ check_sanity <- function(x) {
 }
 
 fit_models <- function(
-    dat, catch, data_subset = NULL, mesh = NULL, cutoff = 20, family = tweedie(), 
-    offset = NULL, use_extra_time = TRUE,
+    dat, catch, data_subset = NULL, mesh = NULL, cutoff = 20, family = tweedie(),
+    offset = NULL, use_extra_time = TRUE, silent = TRUE,
     ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)) {
 
   if (is.null(data_subset)) {
@@ -38,6 +38,7 @@ fit_models <- function(
 
   dat <- droplevels(dat)  # drop extra factor levels before running models
   fits <- list()
+  model_ids <- c()
   i <- 1
 
   cli::cli_inform("\tFitting 1: st = 'rw'")
@@ -46,13 +47,13 @@ fit_models <- function(
       eval(parse(text = catch)) ~ 1,
       family = family,
       data = dat, time = "year", spatiotemporal = "rw", spatial = "on",
-      silent = TRUE, mesh = mesh,
+      silent = silent, mesh = mesh,
       offset = offset,
       extra_time = missing_years,
       control = ctrl
     )
   )
-  model_ids <- i
+  model_ids <- c(model_ids, "st = 'rw'")
   i <- i + 1
 
   cli::cli_inform("\tFitting 2: st IID covariate")
@@ -61,12 +62,12 @@ fit_models <- function(
       eval(parse(text = catch)) ~ 0 + as.factor(year) + log_depth + I(log_depth^2),
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
-      silent = TRUE, mesh = mesh,
+      silent = silent, mesh = mesh,
       offset = offset,
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st IID covariate")
   i <- i + 1
 
   cli::cli_inform("\tFitting 3: st IID s(year)")
@@ -75,12 +76,12 @@ fit_models <- function(
       eval(parse(text = catch)) ~ s(year),
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
-      silent = TRUE, mesh = mesh,
+      silent = silent, mesh = mesh,
       offset = offset,
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st IID s(year)")
   i <- i + 1
 
   cli::cli_inform("\tFitting 4: st IID no covariate as.factor year")
@@ -90,11 +91,12 @@ fit_models <- function(
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
+      silent = silent,
       offset = offset,
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st IID no covariate as.factor year")
   i <- i + 1
 
   cli::cli_inform("\tFitting 5: st time_varying RW")
@@ -106,11 +108,12 @@ fit_models <- function(
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
       offset = offset,
+      silent = silent,
       extra_time = missing_years,
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st time_varying RW")
   i <- i + 1
 
   cli::cli_inform("\tFitting 6: st (1|year)")
@@ -120,11 +123,12 @@ fit_models <- function(
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
+      silent = silent,
       offset = offset,
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st (1|year)")
   i <- i + 1
 
   cli::cli_inform("\tFitting 7: spatial only")
@@ -134,11 +138,12 @@ fit_models <- function(
       family = family,
       data = dat, time = "year", spatiotemporal = "off", spatial = "on",
       mesh = mesh,
+      silent = silent,
       offset = offset,
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "spatial only")
   i <- i + 1
 
   cli::cli_inform("\tFitting 8: st (1 | region)")
@@ -148,21 +153,21 @@ fit_models <- function(
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
+      silent = silent,
       offset = offset,
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, i)
+  model_ids <- c(model_ids, "st (1 | region)")
 
   names(fits) <- paste(model_ids, data_subset, sep = ":")
-  fits 
+  fits
 }
 
 # is_even <- function(column) {
 #   ifelse({{column}} %% 2 == 0, TRUE, FALSE)
 # }
 
-# -------
 get_pred_list <- function(fit_list, newdata) {
   fit_list %>%
   purrr::map(., function(.x) {
@@ -192,9 +197,9 @@ get_index_list <- function(pred_list) {
 }
 
 mk_index_df <- function(index_list) {
-  enframe(index_list) %>% 
-  unnest(col = "value") %>% 
-  separate(col = 'name', into = c('id', 'group'), sep = ":") %>%
-  mutate(id = as.numeric(id)) %>% 
-  right_join(., model_lookup)
+  enframe(index_list) %>%
+    unnest(col = "value") %>%
+    separate(col = 'name', into = c('id', 'group'), sep = ":") %>%
+    mutate(id = as.numeric(id)) %>%
+    right_join(., model_lookup)
 }
