@@ -33,14 +33,21 @@ outside_ye_dat <- dat %>%
   filter(str_detect(survey_abbrev, "HBLL OUT")) %>%
   filter(species_common_name %in% c('yelloweye rockfish')) %>%
   mutate(data_subset = paste(species_common_name, 'Stitched N/S', sep = "-")) %>%
-  split(f = .$species_common_name)
+  group_by(species_common_name) |>
+  group_split()
 
 # future::plan(future::multisession, workers = 5) # or whatever number
 fits1 <- outside_ye_dat %>%
   # furrr::future_map(fit_models, catch = "density_ppkm2", silent = FALSE) %>%
-  purrr::map(fit_models, catch = "density_ppkm2", silent = FALSE) %>%
-  list_flatten(name_spec = "{inner}")
+  purrr::map(fit_models, catch = "density_ppkm2", silent = FALSE)
 # future::plan(future::sequential)
+
+names(fits1[[1]])
+
+
+
+# for now:
+fits1 <- list_flatten(fits1, name_spec = "{inner}")
 
 fits_cleaned1 <- fits %>%
   map(check_sanity)  # omit plots made from models that did not pass sanity check
