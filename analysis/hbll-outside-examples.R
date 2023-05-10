@@ -89,7 +89,7 @@ if (FALSE) {
     filter(str_detect(survey_abbrev, "HBLL OUT")) %>%
     filter(species_common_name %in% c('yelloweye rockfish')) %>%
     split(f = .$survey_abbrev) %>%
-    map(~.x %>% mutate(data_subset = paste(species_common_name, survey_abbrev, sep = "-")))
+    map(~.x %>% mutate(data_subsett = paste(species_common_name, survey_abbrev, sep = "-")))
 
   future::plan(future::multisession, workers = 5) # or whatever number
   fits2 <- outside_test_dat %>%
