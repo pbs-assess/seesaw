@@ -53,6 +53,7 @@ dat <-
          area_swept2 = tow_length_m * doorspread_m, 
          area_swept = ifelse(!is.na(area_swept2), area_swept2, area_swept1)) |>
   mutate(trawl_offset = log(area_swept / 1e5)) |>  # Value used for offset
+  mutate(hook_offset = log(hook_count)) |>  # Value used for offset
   #filter(!(year == 2021 & survey_abbrev == "SYN WCVI")) |>  # this region not usually surveyed in odd years
   sdmTMB::add_utm_columns(c("longitude", "latitude"), utm_crs = 32609) |>
   # simplify df columns

@@ -18,6 +18,8 @@ fit_models <- function(
     data_subset <- unique(dat[[data_subset]])
   }
 
+  if (!is.null(offset)) offset <- dat[[offset]]
+
   message(cat("\n\tFitting models for data subset:", data_subset, "\n"))
 
   if (is.null(mesh)) {
