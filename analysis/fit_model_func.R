@@ -167,7 +167,7 @@ get_pred_list <- function(fit_list, newdata) {
   fit_list %>%
   purrr::map(., function(.x) {
     if (inherits(.x, "sdmTMB")) {
-      newdata <- nd_extra_time %>%
+      newdata <- newdata %>%
         filter(survey %in% unique(.x$data$survey_abbrev),
                year %in% unique(.x$data$year)
         ) %>%
