@@ -1,12 +1,14 @@
 fit_models <- function(
     dat, catch, data_subset = NULL, mesh = NULL, cutoff = 20, family = tweedie(),
-    offset = NULL, use_extra_time = TRUE, silent = TRUE,
+    offset = NULL, silent = TRUE,
     ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)) {
   if (is.null(data_subset)) {
     data_subset <- unique(dat$species_common_name)
   } else {
     data_subset <- unique(dat[[data_subset]])
   }
+
+  if (!is.null(offset)) offset <- dat[[offset]]
 
   message(cat("\n\tFitting models for data subset:", data_subset, "\n"))
 
@@ -15,12 +17,12 @@ fit_models <- function(
     mesh <- make_mesh(dat, c("X", "Y"), cutoff = 20)
   }
 
-  missing_years <- NULL
-  if (use_extra_time) {
-    missing_years <- sdmTMB:::find_missing_time(dat$year)
-    #dat_years <- unique(dat$year)
-    #all_years <- min(dat$year):max(dat$year)
-    #missing_years <- all_years[!(all_years%in% dat_years)]
+  missing_years <- sdmTMB:::find_missing_time(dat$year)
+
+  if (length(missing_years) < 1L) {
+    missing_years <- NULL
+    message(cat("\t- No missing time to be filled in."))
+  } else {
     message(cat("\t- Filling in extra_time with:", missing_years, "\n"))
   }
 
@@ -48,7 +50,8 @@ fit_models <- function(
   fits[[i]] <- try(
     update(fits[[1]],
       formula = eval(parse(text = catch)) ~ 0 + as.factor(year) + poly(log_depth, 2),
-      spatiotemporal = "iid", spatial = "on")
+      spatiotemporal = "iid", spatial = "on"
+    )
   )
   model_ids <- c(model_ids, "st IID covariate")
   i <- i + 1
@@ -114,7 +117,8 @@ fit_models <- function(
       extra_time = missing_years,
       control = sdmTMBcontrol(
         start = list(ln_tau_V = matrix(log(0.1), nrow = 1, ncol = .dim)),
-          map = list(ln_tau_V = rep(factor(NA), .dim)))
+        map = list(ln_tau_V = rep(factor(NA), .dim))
+      )
     )
   )
   model_ids <- c(model_ids, "st time-varying RW; fixed 0.1 SD")
