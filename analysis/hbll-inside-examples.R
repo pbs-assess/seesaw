@@ -2,6 +2,7 @@ library(tidyverse)
 library(gfplot)
 library(sdmTMB)
 library(beepr)
+library(patchwork)
 
 source(here::here('analysis', '00_prep-example-data.R'))
 source(here::here('analysis', 'utils.R'))
@@ -17,7 +18,7 @@ theme_set(mytheme())
 inside_survey_dat <- dat |> filter(str_detect(survey_abbrev, "HBLL INS"))
 
 inside_region_colours <- tibble(
-  region = c("HBLL INS N", "HBLL INS S", 'Both', 'None'),
+  region = c("HBLL INS N", "HBLL INS S", 'Both', 'No data'),
   colours = c(RColorBrewer::brewer.pal(3L, "Set2"), "grey70"))
 
 ggplot(data = inside_survey_dat) +
@@ -38,8 +39,7 @@ dat |>
   mutate(region = case_when(`HBLL INS N` == 1 & is.na(`HBLL INS S`) & is.na(None) ~ 'HBLL INS N',
                             is.na(`HBLL INS N`) & `HBLL INS S` == 1 & is.na(None) ~ 'HBLL INS S',
                             `HBLL INS N` == 1 & `HBLL INS S` == 1 & is.na(None) ~ 'Both',
-                            is.na(`HBLL INS N`) & is.na(`HBLL INS S`) & None == 1 ~ 'None',
-                            TRUE ~ 'poop')) |>
+                            is.na(`HBLL INS N`) & is.na(`HBLL INS S`) & None == 1 ~ 'None') |>
   select(year, region)
 
 fitted_yrs_extra <- min(inside_survey_dat$year):max(inside_survey_dat$year)
@@ -58,13 +58,13 @@ inside_dat <-
   split(f = .$species_common_name) %>%
   map(~.x %>% mutate(data_subset = paste(species_common_name, 'Stitched N/S', sep = "-")))
 
-#future::plan(future::multisession, workers = 5) # or whatever number
+future::plan(future::multisession, workers = 5) # or whatever number
 fits1 <- inside_dat %>%
-  map(fit_models, catch = "catch_count", family = nbinom2(),
+  furrr::future_map(fit_models, catch = "catch_count", family = nbinom2(),
     offset = 'hook_offset',
     data_subset = 'data_subset') %>%
   list_flatten(name_spec = "{inner}")
-#future::plan(future::sequential)
+future::plan(future::sequential)
 
 fits_cleaned1 <- fits1 %>%
   map(., check_sanity)  # omit plots made from models that did not pass sanity check
@@ -76,7 +76,7 @@ beep()
 index_df1 <-
   mk_index_df(indices1) %>%
   left_join(inside_survey_yrs) %>%
-  rename(species = 'group')
+  separate(group, into = c('species', 'group'), sep = "-")
 
 p1 <-
 ggplot(data = index_df1, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
@@ -95,15 +95,15 @@ inside_dat_no2021 <-
   filter(year != 2021) |>
   filter(species_common_name %in% c('quillback rockfish', 'yelloweye rockfish')) %>%
   split(f = .$species_common_name) |>
-  map(~.x |> mutate(data_subset = paste(species_common_name, 'Stitched N/S - no 2021', sep = "-")))
+  map(~.x |> mutate(data_subset = paste(species_common_name, 'Stitched N/S no 2021', sep = "-")))
 
-#future::plan(future::multisession, workers = 5) # or whatever number
+future::plan(future::multisession, workers = 5) # or whatever number
 fits2 <- inside_dat_no2021 |>
-  map(fit_models, catch = "catch_count", family = nbinom2(),
+  furrr::future_map(fit_models, catch = "catch_count", family = nbinom2(),
     offset = 'hook_offset',
     data_subset = 'data_subset') |>
   list_flatten(name_spec = "{inner}")
-#future::plan(future::sequential)
+future::plan(future::sequential)
 
 fits_cleaned2 <- fits2 |>
   map(check_sanity)  # omit plots made from models that did not pass sanity check
@@ -113,10 +113,10 @@ indices2 <- get_index_list(pred_list = preds2)
 beep()
 
 index_df2 <-
-  mk_index_df(indices2) %>%
-  left_join(inside_survey_yrs) %>%
-  rename(species = 'group') %>%
-  mutate(region = ifelse(region %in% c('Both', 'None'), 'No data'))
+  mk_index_df(indices2) |>
+  left_join(inside_survey_yrs) |>
+  separate(group, into = c('species', 'group'), sep = "-") |>
+  mutate(region = ifelse(region %in% c('Both', 'None'), 'No data', region))
 
 p2 <-
 ggplot(data = index_df2, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
@@ -127,3 +127,5 @@ ggplot(data = index_df2, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
   labs(colour = "Sampled region") +
   facet_wrap(species ~ fct_reorder(desc, order), nrow = 2L, scales = "free_y") +
   ggtitle("Stitched N/S - No 2021")
+
+p1 / p2
