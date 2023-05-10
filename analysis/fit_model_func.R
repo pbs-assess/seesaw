@@ -18,6 +18,8 @@ fit_models <- function(
     data_subset <- unique(dat[[data_subset]])
   }
 
+  if (!is.null(offset)) offset <- dat[[offset]]
+
   message(cat("\n\tFitting models for data subset:", data_subset, "\n"))
 
   if (is.null(mesh)) {
@@ -168,15 +170,17 @@ fit_models <- function(
 #   ifelse({{column}} %% 2 == 0, TRUE, FALSE)
 # }
 
-# -------
-get_pred_list <- function(fit_list, newdata, newdata_extra_time = NULL) {
+get_pred_list <- function(fit_list, newdata) {
   fit_list %>%
-  #purrr::map(., function(.x) {
-  furrr::future_map(., function(.x) {
-    newdata <- newdata
+  purrr::map(., function(.x) {
     if (inherits(.x, "sdmTMB")) {
-      if(!is.null(.x$extra_time)) newdata <- newdata_extra_time
-      out <- predict(.x, newdata = newdata, return_tmb_object = TRUE)
+      newdata <- newdata %>%
+        filter(survey %in% unique(.x$data$survey_abbrev),
+               year %in% unique(.x$data$year)
+        ) %>%
+        droplevels()
+      out <- predict(.x, newdata = newdata, return_tmb_object = TRUE, extra_time = .x$extra_time)
+      out$newdata_input <- newdata
     } else {
       out <- NA
     }
@@ -185,10 +189,9 @@ get_pred_list <- function(fit_list, newdata, newdata_extra_time = NULL) {
 }
 
 get_index_list <- function(pred_list) {
-  #purrr::map(pred_list, function(.x) {
-  furrr::future_map(pred_list, function(.x) {
+  purrr::map(pred_list, function(.x) {
     if (length(.x) > 1) {
-      get_index(.x, bias_correct = TRUE, area = .x$data$area)
+      out <- get_index(.x, bias_correct = TRUE, area = .x$newdata_input$area)
     } else {
       out <- NA  # keep empty fits as visual cue that these did not fit when plotting
     }
@@ -197,8 +200,8 @@ get_index_list <- function(pred_list) {
 
 mk_index_df <- function(index_list) {
   enframe(index_list) %>%
-  unnest(col = "value") %>%
-  separate(col = 'name', into = c('id', 'species'), sep = ":") %>%
-  mutate(id = as.numeric(id)) %>%
-  right_join(., model_lookup)
+    unnest(col = "value") %>%
+    separate(col = 'name', into = c('id', 'group'), sep = ":") %>%
+    mutate(id = as.numeric(id)) %>%
+    right_join(., model_lookup)
 }
