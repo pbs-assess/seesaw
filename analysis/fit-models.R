@@ -1,8 +1,7 @@
 fit_models <- function(
     dat, catch, data_subset = NULL, mesh = NULL, cutoff = 20, family = tweedie(),
-  offset = NULL, use_extra_time = TRUE, silent = TRUE,
-  ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)) {
-
+    offset = NULL, use_extra_time = TRUE, silent = TRUE,
+    ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)) {
   if (is.null(data_subset)) {
     data_subset <- unique(dat$species_common_name)
   } else {
@@ -20,14 +19,14 @@ fit_models <- function(
 
   missing_years <- NULL
   if (use_extra_time) {
-    #missing_years <- sdmTMB:::find_missing_time(dat$year)
+    # missing_years <- sdmTMB:::find_missing_time(dat$year)
     dat_years <- unique(dat$year)
     all_years <- min(dat$year):max(dat$year)
-    missing_years <- all_years[!(all_years%in% dat_years)]
+    missing_years <- all_years[!(all_years %in% dat_years)]
     message(cat("\t- Filling in extra_time with:", missing_years, "\n"))
   }
 
-  dat <- droplevels(dat)  # drop extra factor levels before running models
+  dat <- droplevels(dat) # drop extra factor levels before running models
   fits <- list()
   model_ids <- c()
   i <- 1

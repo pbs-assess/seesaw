@@ -42,27 +42,26 @@ fits1 <- outside_ye_dat %>%
   purrr::map(fit_models, catch = "density_ppkm2", silent = FALSE)
 # future::plan(future::sequential)
 
-names(fits1[[1]])
-
-
-
-# for now:
 fits1 <- list_flatten(fits1, name_spec = "{inner}")
 
 fits_cleaned1 <- fits %>%
   map(check_sanity)  # omit plots made from models that did not pass sanity check
 
 preds1 <- get_pred_list(fits_cleaned1, newdata = outside_nd)
-indices1 <- get_index_list(pred_list = preds1)
+indices1 <- get_index_list(pred_list = preds1) |>
+  setNames(names(fits1))
 beep()
 
+ids <- names(fits1) |> strsplit(":") |> purrr::map(~.x[[1]]) |> unlist()
+lu <- tibble(id = seq_along(ids), desc = ids, order = as.integer(id))
+
 index_df <-
-  mk_index_df(indices1) %>%
+  mk_index_df(indices1, lu) %>%
   left_join(outside_survey_yrs) %>%
   rename(species = 'group')
 
 p1 <-
-ggplot(data = index_df, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
+  ggplot(data = index_df, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
   geom_pointrange(aes(colour = region)) +
   geom_ribbon(alpha = 0.20, colour = NA) +
   scale_colour_manual(values = c("#66C2A5", "#FC8D62"), na.translate = FALSE) +
@@ -71,40 +70,41 @@ ggplot(data = index_df, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
   ggtitle("Stitched N/S")
 
 p1
+
 # Yelloweye outside split N/S
 # ------------------------------------------------------------------------------
 if (FALSE) {
-outside_test_dat <- dat %>%
-  filter(str_detect(survey_abbrev, "HBLL OUT")) %>%
-  filter(species_common_name %in% c('yelloweye rockfish')) %>%
-  split(f = .$survey_abbrev) %>%
-  map(~.x %>% mutate(data_subset = paste(species_common_name, survey_abbrev, sep = "-")))
+  outside_test_dat <- dat %>%
+    filter(str_detect(survey_abbrev, "HBLL OUT")) %>%
+    filter(species_common_name %in% c('yelloweye rockfish')) %>%
+    split(f = .$survey_abbrev) %>%
+    map(~.x %>% mutate(data_subset = paste(species_common_name, survey_abbrev, sep = "-")))
 
-future::plan(future::multisession, workers = 5) # or whatever number
-fits2 <- outside_test_dat %>%
-  furrr::future_map(fit_models, catch = "density_ppkm2", data_subset = "data_subset") %>%
-  list_flatten(name_spec = "{inner}")
-future::plan(future::sequential)
+  future::plan(future::multisession, workers = 5) # or whatever number
+  fits2 <- outside_test_dat %>%
+    furrr::future_map(fit_models, catch = "density_ppkm2", data_subset = "data_subset") %>%
+    list_flatten(name_spec = "{inner}")
+  future::plan(future::sequential)
 
-fits_cleaned2 <- fits2 %>%
-  map(., check_sanity)  # omit plots made from models that did not pass sanity check
+  fits_cleaned2 <- fits2 %>%
+    map(., check_sanity)  # omit plots made from models that did not pass sanity check
 
-preds2 <- get_pred_list(fits_cleaned2, newdata = outside_nd)
-indices2 <- get_index_list(pred_list = preds2)
-beep()
+  preds2 <- get_pred_list(fits_cleaned2, newdata = outside_nd)
+  indices2 <- get_index_list(pred_list = preds2)
+  beep()
 
-index_df2 <-
-  mk_index_df(indices2) %>%
-  left_join(outside_survey_yrs) %>%
-  separate(group, into = c('species', 'region2'), sep = "-")
+  index_df2 <-
+    mk_index_df(indices2) %>%
+    left_join(outside_survey_yrs) %>%
+    separate(group, into = c('species', 'region2'), sep = "-")
 
-p2 <-
-ggplot(data = index_df2, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
-  geom_pointrange(aes(colour = region)) +
-  geom_ribbon(alpha = 0.20, colour = NA) +
-  scale_colour_manual(values = c("#66C2A5", "#FC8D62"), na.translate = FALSE) +
-  labs(colour = "Sampled region") +
-  facet_wrap(region2 ~ fct_reorder(desc, order), nrow = 2L, scales = "free_y")
+  p2 <-
+    ggplot(data = index_df2, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
+    geom_pointrange(aes(colour = region)) +
+    geom_ribbon(alpha = 0.20, colour = NA) +
+    scale_colour_manual(values = c("#66C2A5", "#FC8D62"), na.translate = FALSE) +
+    labs(colour = "Sampled region") +
+    facet_wrap(region2 ~ fct_reorder(desc, order), nrow = 2L, scales = "free_y")
 
-(p1 / p2) + plot_layout(heights = c(1, 2))
+  (p1 / p2) + plot_layout(heights = c(1, 2))
 }

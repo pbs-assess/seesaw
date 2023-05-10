@@ -34,10 +34,8 @@ get_index_list <- function(pred_list) {
   })
 }
 
-mk_index_df <- function(index_list) {
+mk_index_df <- function(index_list, lu) {
   enframe(index_list) %>%
-    unnest(col = "value") %>%
-    separate(col = 'name', into = c('id', 'group'), sep = ":") %>%
-    mutate(id = as.numeric(id)) %>%
-    right_join(., model_lookup)
+    unnest(col = "value") |>
+    separate(col = 'name', into = c('desc', 'group'), sep = ":")
 }
