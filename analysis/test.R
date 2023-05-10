@@ -8,10 +8,6 @@ source(here::here('analysis', '00_prep-example-data.R'))
 source(here::here('analysis', 'utils.R'))
 source(here::here('analysis', 'fit_model_func.R'))
 
-mytheme <- function() ggsidekick::theme_sleek()  # sometimes I add more layers to themes
-theme_set(mytheme()
-
-
 ggplot(data = inside_survey_dat) +
 geom_point(aes(x = X, y = Y, colour = survey_abbrev)) +
 scale_colour_manual(values = inside_region_colours$colours,
