@@ -42,7 +42,7 @@ fits1 <- outside_ye_dat %>%
 future::plan(future::sequential)
 
 fits_cleaned1 <- fits1 %>%
-  map(., check_sanity)  # omit plots made from models that did not pass sanity check
+  map(check_sanity)  # omit plots made from models that did not pass sanity check
 
 preds1 <- get_pred_list(fits_cleaned1, newdata = outside_nd)
 indices1 <- get_index_list(pred_list = preds1)
@@ -77,7 +77,7 @@ fits2 <- outside_test_dat %>%
 future::plan(future::sequential)
 
 fits_cleaned2 <- fits2 %>%
-  map(., check_sanity)  # omit plots made from models that did not pass sanity check
+  map(check_sanity)  # omit plots made from models that did not pass sanity check
 
 preds2 <- get_pred_list(fits_cleaned2, newdata = outside_nd)
 indices2 <- get_index_list(pred_list = preds2)
@@ -94,6 +94,7 @@ ggplot(data = index_df2, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
   geom_ribbon(alpha = 0.20, colour = NA) +
   scale_colour_manual(values = c("#66C2A5", "#FC8D62"), na.translate = FALSE) +
   labs(colour = "Sampled region") +
-  facet_wrap(region2 ~ fct_reorder(desc, order), nrow = 2L, scales = "free_y")
+  facet_wrap(region2 ~ fct_reorder(desc, order), nrow = 2L, scales = "free_y") +
+  ggtitle("Separate N/S")
 
 (p1 / p2) + plot_layout(heights = c(1, 2))
