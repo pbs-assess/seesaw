@@ -8,8 +8,6 @@ fit_models <- function(
     data_subset <- unique(dat[[data_subset]])
   }
 
-  if (!is.null(offset)) offset <- dat[[offset]]
-
   message(cat("\n\tFitting models for data subset:", data_subset, "\n"))
 
   if (is.null(mesh)) {
@@ -48,14 +46,9 @@ fit_models <- function(
 
   cli::cli_inform("\tFitting 2: st IID covariate")
   fits[[i]] <- try(
-    sdmTMB(
-      eval(parse(text = catch)) ~ 0 + as.factor(year) + log_depth + I(log_depth^2),
-      family = family,
-      data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
-      silent = silent, mesh = mesh,
-      offset = offset,
-      control = ctrl
-    )
+    update(fits[[1]],
+      formula = eval(parse(text = catch)) ~ 0 + as.factor(year) + poly(log_depth, 2),
+      spatiotemporal = "iid", spatial = "on")
   )
   model_ids <- c(model_ids, "st IID covariate")
   i <- i + 1
@@ -63,7 +56,7 @@ fit_models <- function(
   cli::cli_inform("\tFitting 3: st IID s(year)")
   fits[[i]] <- try(
     sdmTMB(
-      eval(parse(text = catch)) ~ s(year),
+      eval(parse(text = catch)) ~ s(year, k = 5),
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       silent = silent, mesh = mesh,
@@ -103,7 +96,62 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "st time_varying RW")
+  model_ids <- c(model_ids, "st time-varying RW")
+  i <- i + 1
+
+  cli::cli_inform("\tst time_varying RW, fixed SD")
+
+  .dim <- if (isTRUE(family$delta)) 2 else 1
+  fits[[i]] <- try(
+    sdmTMB(
+      eval(parse(text = catch)) ~ 0,
+      family = family,
+      time_varying = ~1, time_varying_type = "rw",
+      data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
+      mesh = mesh,
+      offset = offset,
+      silent = silent,
+      extra_time = missing_years,
+      control = sdmTMBcontrol(
+        start = list(ln_tau_V = matrix(log(0.1), nrow = 1, ncol = .dim)),
+          map = list(ln_tau_V = rep(factor(NA), .dim)))
+    )
+  )
+  model_ids <- c(model_ids, "st time-varying RW; fixed 0.1 SD")
+  i <- i + 1
+
+  cli::cli_inform("\tspatial time-varying RW")
+  fits[[i]] <- try(
+    sdmTMB(
+      eval(parse(text = catch)) ~ 0,
+      family = family,
+      time_varying = ~1, time_varying_type = "rw",
+      data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
+      mesh = mesh,
+      offset = offset,
+      silent = silent,
+      extra_time = missing_years,
+      control = ctrl
+    )
+  )
+  model_ids <- c(model_ids, "spatial time-varying RW")
+  i <- i + 1
+
+  cli::cli_inform("\tspatial time-varying AR(1)")
+  fits[[i]] <- try(
+    sdmTMB(
+      eval(parse(text = catch)) ~ 0,
+      family = family,
+      time_varying = ~1, time_varying_type = "ar1",
+      data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
+      mesh = mesh,
+      offset = offset,
+      silent = silent,
+      extra_time = missing_years,
+      control = ctrl
+    )
+  )
+  model_ids <- c(model_ids, "spatial time-varying AR(1)")
   i <- i + 1
 
   cli::cli_inform("\tFitting 6: st (1|year)")

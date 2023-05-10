@@ -1,5 +1,5 @@
 check_sanity <- function(x) {
-  if (!all(unlist(sanity(x)))) {
+  if (!all(unlist(sanity(x, gradient_thresh = 0.01)))) {
     return(NA)
   } else {
     return(x)
@@ -8,7 +8,7 @@ check_sanity <- function(x) {
 
 get_pred_list <- function(fit_list, newdata) {
   fit_list %>%
-  purrr::map(., function(.x) {
+    furrr::future_map(function(.x) {
     if (inherits(.x, "sdmTMB")) {
       newdata <- newdata %>%
         filter(survey %in% unique(.x$data$survey_abbrev),
@@ -25,7 +25,7 @@ get_pred_list <- function(fit_list, newdata) {
 }
 
 get_index_list <- function(pred_list) {
-  purrr::map(pred_list, function(.x) {
+  furrr::future_map(pred_list, function(.x) {
     if (length(.x) > 1) {
       out <- get_index(.x, bias_correct = TRUE, area = .x$newdata_input$area)
     } else {
@@ -34,7 +34,7 @@ get_index_list <- function(pred_list) {
   })
 }
 
-mk_index_df <- function(index_list, lu) {
+mk_index_df <- function(index_list) {
   enframe(index_list) %>%
     unnest(col = "value") |>
     separate(col = 'name', into = c('desc', 'group'), sep = ":")

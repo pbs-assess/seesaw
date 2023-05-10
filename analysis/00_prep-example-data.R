@@ -46,7 +46,7 @@ hbll_outside <- bind_rows(hbll_n_grid, hbll_s_grid) |>
   rename(longitude = "X", latitude = "Y") |>
   add_utm_columns(c("longitude", "latitude"), utm_crs = 32609) |>
   mutate(log_depth = log(depth), region = as.factor(survey)) |>
-  mutate(area = 4) # CHECK ME: area of hbll outside should be 4?
+  mutate(area = 4)
 
 # Clean survey data ------------------------------------------------------------
 dat <-
@@ -72,7 +72,7 @@ dat <-
     catch_weight, catch_count,
     density_kgkm2, # density_pcpm2,
     density_ppkm2,
-    area_swept, trawl_offset, hook_count, time_deployed
+    area_swept, trawl_offset, hook_count, hook_offset, time_deployed
   ) |>
   # specify factor variables that will be used in models
   mutate(

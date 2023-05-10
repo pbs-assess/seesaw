@@ -110,3 +110,7 @@ make_grid <- function(.x, years) {
   .nd$year <- rep(years, each = nrow(.x))
   .nd
 }
+
+beep <- function() {
+  if (Sys.info()[["user"]] != "seananderson") beepr::beep() # :)
+}
