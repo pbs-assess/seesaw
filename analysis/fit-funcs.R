@@ -37,6 +37,7 @@ get_index_list <- function(pred_list) {
 
 mk_index_df <- function(index_list) {
   enframe(index_list) |>
+    mutate(id = row_number()) |>
     unnest(col = "value") |>
     separate(col = "name", into = c("desc", "group"), sep = ":")
 }
