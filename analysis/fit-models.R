@@ -32,7 +32,7 @@ fit_models <- function(
   i <- 1
 
   #cli::cli_inform("\tFitting 7: spatial only")
-  message("\tFitting", i, ": spatial only")
+  message("\tFitting", i, ": spatial only, as.factor(year)")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 0 + as.factor(year),
@@ -44,10 +44,10 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "spatial only")
+  model_ids <- c(model_ids, "spatial only, as.factor(year)")
   i <- i + 1
 
-  cli::cli_inform("\tFitting 1: st = 'rw'")
+  cli::cli_inform("\tFitting 1: st RW")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 1,
@@ -59,10 +59,10 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "st = 'rw'")
+  model_ids <- c(model_ids, "st RW")
   i <- i + 1
 
-  cli::cli_inform("\tFitting 1: st = 'ar1'")
+  cli::cli_inform("\tFitting 1: st AR1")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 1,
@@ -74,7 +74,7 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "st = 'ar1'")
+  model_ids <- c(model_ids, "st AR1")
   i <- i + 1
 
   cli::cli_inform("\tFitting 2: st IID covariate")
@@ -87,7 +87,7 @@ fit_models <- function(
   model_ids <- c(model_ids, "st IID covariate")
   i <- i + 1
 
-  cli::cli_inform("\tFitting 3: st IID s(year)")
+  cli::cli_inform("\tFitting 3: st IID, s(year)")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ s(year, k = 5),
@@ -98,10 +98,10 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "st IID s(year)")
+  model_ids <- c(model_ids, "st IID, s(year)")
   i <- i + 1
 
-  cli::cli_inform("\tFitting 4: st IID no covariate as.factor year")
+  cli::cli_inform("\tFitting 4: st IID, as.factor year")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 0 + as.factor(year),
@@ -113,10 +113,10 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "st IID no covariate as.factor year")
+  model_ids <- c(model_ids, "st IID, as.factor year")
   i <- i + 1
 
-  cli::cli_inform("\tFitting 5: st time_varying RW")
+  cli::cli_inform("\tFitting 5: st IID, time_varying RW")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 0,
@@ -130,10 +130,10 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "st time-varying RW")
+  model_ids <- c(model_ids, "st IID, time-varying RW")
   i <- i + 1
 
-  cli::cli_inform("\tst time_varying RW, fixed SD")
+  cli::cli_inform("\tst IID, time_varying RW, fixed SD")
 
   .dim <- if (isTRUE(family$delta)) 2 else 1
   fits[[i]] <- try(
@@ -152,10 +152,10 @@ fit_models <- function(
       )
     )
   )
-  model_ids <- c(model_ids, "st time-varying RW; fixed 0.1 SD")
+  model_ids <- c(model_ids, "st IID, time-varying RW; fixed 0.1 SD")
   i <- i + 1
 
-  cli::cli_inform("\tspatial time-varying RW")
+  cli::cli_inform("\tst IID, time-varying RW")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 0,
@@ -169,10 +169,10 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "spatial time-varying RW")
+  model_ids <- c(model_ids, "st IID, time-varying RW")
   i <- i + 1
 
-  cli::cli_inform("\tspatial time-varying AR(1)")
+  cli::cli_inform("\tst IID, time-varying AR(1)")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 0,
@@ -186,10 +186,10 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "spatial time-varying AR(1)")
+  model_ids <- c(model_ids, "st IID, time-varying AR(1)")
   i <- i + 1
 
-  cli::cli_inform("\tFitting : st (1|year)")
+  cli::cli_inform("\tFitting : st IID, (1|year)")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 1 + (1 | fyear),
@@ -201,10 +201,10 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "st (1|year)")
+  model_ids <- c(model_ids, "st IID, (1|year)")
   i <- i + 1
 
-  cli::cli_inform("\tFitting 8: st (1 | region)")
+  cli::cli_inform("\tFitting 8: st IID, (1|region)")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 0 + fyear + region,
@@ -216,9 +216,10 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "st (1 | region)")
+  model_ids <- c(model_ids, "st IID, (1|region)")
+  i <- i + 1
 
-  cli::cli_inform("\tFitting: st (1 | year-pairs) AR1")
+  cli::cli_inform("\tFitting: st = AR1, (1|year-pairs)")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 0 + as.factor(year_pair),
@@ -231,9 +232,10 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "st (1 | year-pairs) RW")
+  model_ids <- c(model_ids, "st = AR1, (1|year-pairs)")
+  i <- i + 1
 
-  cli::cli_inform("\tFitting: st (1 | year-pairs) RW")
+  cli::cli_inform("\tFitting: st = RW, (1|year-pairs)")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 0 + as.factor(year_pair),
@@ -246,7 +248,7 @@ fit_models <- function(
       control = ctrl
     )
   )
-  model_ids <- c(model_ids, "st (1 | year-pairs) RW")
+  model_ids <- c(model_ids, "st = RW, (1|year-pairs)")
 
   names(fits) <- paste(model_ids, data_subset, sep = ":")
   fits
