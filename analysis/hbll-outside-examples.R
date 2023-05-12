@@ -2,12 +2,12 @@ library(tidyverse)
 library(sdmTMB)
 library(patchwork)
 
-source(here::here('analysis', '00_prep-example-data.R'))
-source(here::here('analysis', 'utils.R'))
-source(here::here('analysis', 'fit-funcs.R'))
-source(here::here('analysis', 'fit-models.R'))
+source(here::here("analysis", "00_prep-example-data.R"))
+source(here::here("analysis", "utils.R"))
+source(here::here("analysis", "fit-funcs.R"))
+source(here::here("analysis", "fit-models.R"))
 
-mytheme <- function() ggsidekick::theme_sleek()  # sometimes I add more layers to themes
+mytheme <- function() ggsidekick::theme_sleek() # sometimes I add more layers to themes
 theme_set(mytheme())
 
 outside_survey_dat <- dat %>% filter(str_detect(survey_abbrev, "HBLL OUT"))
@@ -16,7 +16,7 @@ outside_survey_yrs <- dat %>%
   filter(str_detect(survey_abbrev, "HBLL OUT")) %>%
   distinct(year, survey_abbrev) %>%
   arrange(year) %>%
-  rename(region = 'survey_abbrev')
+  rename(region = "survey_abbrev")
 
 fitted_yrs_extra <- seq(min(outside_survey_yrs$year), max(outside_survey_yrs$year))
 
@@ -29,11 +29,11 @@ outside_nd <-
 # ------------------------------------------------------------------------------
 
 # spp <- c('yelloweye rockfish', 'north pacific spiny dogfish')
-spp <- c('yelloweye rockfish')
+spp <- c("yelloweye rockfish")
 sp_dat <- dat %>%
   filter(str_detect(survey_abbrev, "HBLL OUT")) %>%
   filter(species_common_name %in% spp) %>%
-  mutate(data_subset = paste(species_common_name, 'Stitched N/S', sep = "-")) %>%
+  mutate(data_subset = paste(species_common_name, "Stitched N/S", sep = "-")) %>%
   group_by(species_common_name) %>%
   group_split()
 
@@ -46,7 +46,8 @@ fits1 <- sp_dat %>%
   # map(fit_models, catch = "density_ppkm2", silent = FALSE, family = sdmTMB::delta_gamma())
   # map(fit_models, catch = "density_ppkm2", silent = FALSE, family = sdmTMB::tweedie())
   map_func(
-    fit_models, catch = "catch_count", silent = FALSE,
+    fit_models,
+    catch = "catch_count", silent = FALSE,
     family = sdmTMB::nbinom2(), offset = "hook_offset"
   )
 
@@ -67,7 +68,7 @@ lu <- tibble(id = seq_along(ids), desc = ids, order = as.integer(id))
 
 index_df <- mk_index_df(indices1) %>%
   left_join(outside_survey_yrs, by = join_by(year)) %>%
-  rename(species = 'group') %>%
+  rename(species = "group") %>%
   left_join(lu, by = join_by(desc))
 
 p1 <-
@@ -87,9 +88,9 @@ p1
 if (FALSE) {
   outside_test_dat <- dat %>%
     filter(str_detect(survey_abbrev, "HBLL OUT")) %>%
-    filter(species_common_name %in% c('yelloweye rockfish')) %>%
+    filter(species_common_name %in% c("yelloweye rockfish")) %>%
     split(f = .$survey_abbrev) %>%
-    map(~.x %>% mutate(data_subsett = paste(species_common_name, survey_abbrev, sep = "-")))
+    map(~ .x %>% mutate(data_subsett = paste(species_common_name, survey_abbrev, sep = "-")))
 
   future::plan(future::multisession, workers = 5) # or whatever number
   fits2 <- outside_test_dat %>%
@@ -98,7 +99,7 @@ if (FALSE) {
   future::plan(future::sequential)
 
   fits_cleaned2 <- fits2 %>%
-    map(., check_sanity)  # omit plots made from models that did not pass sanity check
+    map(., check_sanity) # omit plots made from models that did not pass sanity check
 
   preds2 <- get_pred_list(fits_cleaned2, newdata = outside_nd)
   indices2 <- get_index_list(pred_list = preds2)
@@ -107,7 +108,7 @@ if (FALSE) {
   index_df2 <-
     mk_index_df(indices2) %>%
     left_join(outside_survey_yrs) %>%
-    separate(group, into = c('species', 'region2'), sep = "-")
+    separate(group, into = c("species", "region2"), sep = "-")
 
   p2 <-
     ggplot(data = index_df2, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
