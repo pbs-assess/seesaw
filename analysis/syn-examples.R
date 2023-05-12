@@ -30,12 +30,6 @@
 # - If an offset is included in the original model; does this follow through in
 #   when we use predict.sdmTMB
 
-# Should 2021 WCVI be left out? Should the analysis be compared with and without
-# this year? To see if it has any affect?
-# distinct(dat, year, survey_abbrev) %>% arrange(survey_abbrev, year)
-# dat %>% filter(year == 2021, survey_abbrev == "SYN WCVI")
-
-
 library(tidyverse)
 library(gfplot)
 library(sdmTMB)
@@ -47,8 +41,7 @@ source(here::here("analysis", "utils.R"))
 source(here::here("analysis", "fit-models.R"))
 source(here::here("analysis", "fit-funcs.R"))
 
-mytheme <- function() ggsidekick::theme_sleek() # sometimes I add more layers to themes
-theme_set(mytheme())
+theme_set(ggsidekick::theme_sleek())
 
 plot_index <- function(df) {
   df |>
@@ -67,7 +60,6 @@ syn_survey_dat <- dat |>
   filter(!(year %in% c(2003, 2004, 2020))) |> # Use only complete N/S sampling years
   drop_na(trawl_offset) # There are some NA values in the offset
 
-# Consider excluding 2007; or exclude the WCHG from 2007 to make the data more comparable?
 
 # Come back to this because I don't know that the categories are straightforward
 syn_region_colours <- tibble(
