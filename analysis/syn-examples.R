@@ -69,7 +69,7 @@ plot_index <- function(df) {
 get_syn_index <- function(sp_dat, fit_file, index_file) {
   future::plan(future::multisession, workers = 5) # or whatever number
   map_func <- furrr::future_map
-  #map_func <- purrr::map
+  # map_func <- purrr::map
   message("Fitting models")
   fits1 <- sp_dat |>
     map_func(
@@ -159,18 +159,18 @@ syn_nd <-
   mutate(fyear = as.factor(year)) |>
   mutate(year_pair = cut(year, seq(min(year), max(year) + 2, 2), right = FALSE))
 
-#distinct(syn_nd, year, year_pair)
+# distinct(syn_nd, year, year_pair)
 
 # What species to include or exclude
-#spp <- c("shortraker rockfish") # Not enough data to estimate factor year
-#spp <- c("lingcod", "dover sole", "pacific cod", "rex sole", "walleye pollock")
-#spp <- c("petrale sole")
+# spp <- c("shortraker rockfish") # Not enough data to estimate factor year
+# spp <- c("lingcod", "dover sole", "pacific cod", "rex sole", "walleye pollock")
+# spp <- c("petrale sole")
 spp <- c("walleye pollock")
 spp <- c("lingcod", "dover sole", "pacific cod", "rex sole")
-#spp <- c("arrowtooth flounder", "bocaccio", "silvergray rockfish", "yellowtail rockfish")
-fit_dir <- here::here('data-outputs', 'syn', 'fits')
-ind_dir <- here::here('data-outputs', 'syn', 'inds')
-fig_dir <- here::here('figs', 'syn')
+# spp <- c("arrowtooth flounder", "bocaccio", "silvergray rockfish", "yellowtail rockfish")
+fit_dir <- here::here("data-outputs", "syn", "fits")
+ind_dir <- here::here("data-outputs", "syn", "inds")
+fig_dir <- here::here("figs", "syn")
 # ------------------------------------------------------------------------------
 # Strict alternating
 # -----------------------
@@ -195,26 +195,26 @@ sp_dat <- sp_dat_alt |>
   group_split()
 
 ind_list <- get_syn_index(sp_dat,
-#walleye_ind_list <- get_syn_index(sp_dat,
+  # walleye_ind_list <- get_syn_index(sp_dat,
   fit_file = here::here(fit_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS")),
-  index_file = here::here(ind_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS")))
+  index_file = here::here(ind_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS"))
+)
 beep()
 
 test2 <- mk_index_df(ind_list) |>
   separate(group, into = c("species", "group"), sep = "-") |>
   left_join(syn_survey_yrs, by = "year") |>
-  mutate(region = case_when(
-    (group == "Strict alternating N/S" & year %% 2 == 0) ~ "QCS + HS",
-    (group == "Strict alternating N/S" & year %% 2 == 1) ~ "WCHG + WCVI"),
-     group == "Additional region sampling" ~ region) |>
+  mutate(region = ifelse(year %% 2 == 1, "QCS + HS", "WCHG + WCVI")) |>
   mutate(region = replace(region, year == 2020, "No data")) |>
   left_join(syn_region_colours, by = "region") |>
-  left_join(positive_sets, by = "species") |>
-  filter(mean_pos_sets > 0.06)
+  filter(desc != "st IID, (1|region") # This doesn't make sense for strict alternating
+# left_join(positive_sets, by = "species") |>
+# filter(mean_pos_sets > 0.06)
 
 plot_index(test2) +
-  facet_wrap(group ~ desc, scales = "free_y")
-  #facet_wrap(paste0(species, "(", mean_pos_sets, ")") ~ desc, scales = "free_y")
+  facet_wrap(~desc, scales = "free_y", nrow = 2L) +
+  ggtitle("Walleye Pollock")
+# facet_wrap(paste0(species, "(", mean_pos_sets, ")") ~ desc, scales = "free_y")
 
 
 # alternating_ind_list <- get_syn_index(sp_dat,
