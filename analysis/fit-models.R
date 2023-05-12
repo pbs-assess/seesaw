@@ -203,6 +203,34 @@ fit_models <- function(
   )
   model_ids <- c(model_ids, "st (1 | region)")
 
+  cli::cli_inform("\tFitting: st (1 | year-pairs) AR1")
+  fits[[i]] <- try(
+    sdmTMB(
+      eval(parse(text = catch)) ~ 0 + as.factor(year_pair),
+      family = family,
+      data = dat, time = "year", spatiotemporal = "AR1", spatial = "on",
+      mesh = mesh,
+      silent = silent,
+      offset = offset,
+      control = ctrl
+    )
+  )
+  model_ids <- c(model_ids, "st (1 | year-pairs) RW")
+
+  cli::cli_inform("\tFitting: st (1 | year-pairs) RW")
+  fits[[i]] <- try(
+    sdmTMB(
+      eval(parse(text = catch)) ~ 0 + as.factor(year_pair),
+      family = family,
+      data = dat, time = "year", spatiotemporal = "RW", spatial = "on",
+      mesh = mesh,
+      silent = silent,
+      offset = offset,
+      control = ctrl
+    )
+  )
+  model_ids <- c(model_ids, "st (1 | year-pairs) RW")
+
   names(fits) <- paste(model_ids, data_subset, sep = ":")
   fits
 }
