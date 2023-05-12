@@ -31,6 +31,22 @@ fit_models <- function(
   model_ids <- c()
   i <- 1
 
+  #cli::cli_inform("\tFitting 7: spatial only")
+  message("\tFitting", i, ": spatial only")
+  fits[[i]] <- try(
+    sdmTMB(
+      eval(parse(text = catch)) ~ 0 + as.factor(year),
+      family = family,
+      data = dat, time = "year", spatiotemporal = "off", spatial = "on",
+      mesh = mesh,
+      silent = silent,
+      offset = offset,
+      control = ctrl
+    )
+  )
+  model_ids <- c(model_ids, "spatial only")
+  i <- i + 1
+
   cli::cli_inform("\tFitting 1: st = 'rw'")
   fits[[i]] <- try(
     sdmTMB(
@@ -158,7 +174,7 @@ fit_models <- function(
   model_ids <- c(model_ids, "spatial time-varying AR(1)")
   i <- i + 1
 
-  cli::cli_inform("\tFitting 6: st (1|year)")
+  cli::cli_inform("\tFitting : st (1|year)")
   fits[[i]] <- try(
     sdmTMB(
       eval(parse(text = catch)) ~ 1 + (1 | fyear),
@@ -171,21 +187,6 @@ fit_models <- function(
     )
   )
   model_ids <- c(model_ids, "st (1|year)")
-  i <- i + 1
-
-  cli::cli_inform("\tFitting 7: spatial only")
-  fits[[i]] <- try(
-    sdmTMB(
-      eval(parse(text = catch)) ~ 0 + as.factor(year),
-      family = family,
-      data = dat, time = "year", spatiotemporal = "off", spatial = "on",
-      mesh = mesh,
-      silent = silent,
-      offset = offset,
-      control = ctrl
-    )
-  )
-  model_ids <- c(model_ids, "spatial only")
   i <- i + 1
 
   cli::cli_inform("\tFitting 8: st (1 | region)")
