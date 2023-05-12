@@ -43,29 +43,91 @@ source(here::here("analysis", "fit-funcs.R"))
 
 theme_set(ggsidekick::theme_sleek())
 
+get_positive_sets <- function(df, response_column) {
+  positive_sets <- filter(df, {{ response_column }} != 0)
+  prop_pos <- round(nrow(positive_sets) / nrow(df), digits = 3)
+  prop_pos
+}
+
+pal <- c(
+  "QCS + HS" = "#D55E00",
+  "QCS + HS + WCVI" = "#CC79A7",
+  "QCS + HS + WCHG" = "#009E73",
+  "WCHG + WCVI" = "#56B4E9",
+  "No data" = "grey50"
+)
+
 plot_index <- function(df) {
   df |>
     ggplot(mapping = aes(x = year, y = est, ymin = lwr, ymax = upr, colour = region)) +
     geom_pointrange() +
     geom_ribbon(alpha = 0.20, colour = NA) +
-    scale_colour_manual(values = syn_region_colours$colours, breaks = syn_region_colours$region) +
+    scale_colour_manual(values = pal) +
     labs(colour = "Sampled region")
 }
 
+get_syn_index <- function(sp_dat, fit_file, index_file) {
+  # message("Splitting data by species")
+  # sp_dat <-
+  #   sp_dat |>
+  #   group_by(species_common_name) |>
+  #   group_split()
+
+  future::plan(future::multisession, workers = 5) # or whatever number
+  map_func <- furrr::future_map
+  #map_func <- purrr::map
+  message("Fitting models")
+  fits1 <- sp_dat |>
+    map_func(
+      fit_models,
+      catch = "catch_weight", silent = FALSE,
+      family = tweedie(), offset = "trawl_offset", data_subset = "data_subset"
+    ) |>
+    list_flatten(name_spec = "{inner}")
+  future::plan(future::sequential)
+
+  fits_cleaned <- fits1 |>
+    map(check_sanity) # omit plots made from models that did not pass sanity check
+
+  if (!is.null(fit_file)) saveRDS(fits_cleaned, fit_file)
+
+  message("Getting predictions")
+  preds1 <- get_pred_list(fits_cleaned, newdata = syn_nd)
+  message("Getting index")
+  indices1 <- get_index_list(pred_list = preds1)
+
+  if (!is.null(index_file)) saveRDS(fits_cleaned, index_file)
+
+  indices1
+}
 
 # Setup inside data and look at survey coverage over time
 # ------------------------------------------------------------------------------
 syn_survey_dat <- dat |>
   filter(str_detect(survey_abbrev, "SYN")) |>
   filter(!(year %in% c(2003, 2004, 2020))) |> # Use only complete N/S sampling years
-  drop_na(trawl_offset) # There are some NA values in the offset
+  drop_na(trawl_offset) |> # There are some NA values in the offset
+  # SOPO only species also tended to be the species that had best trawl coverage
+  drop_na(type) # include only SOPO species for a start
 
+# syn_survey_dat |> distinct(species_common_name, type) %>% print(n = 40)
 
-# Come back to this because I don't know that the categories are straightforward
-syn_region_colours <- tibble(
-  region = c("QCS + HS", "WCHG + WCVI", "QCS + HS + WCVI", "QCS + HS + WCHG", "No data"),
-  colours = c(RColorBrewer::brewer.pal(4L, "Set2"), "grey70")
-)
+positive_sets <-
+  syn_survey_dat %>%
+  split(f = list(.$species_common_name, .$year)) %>%
+  map(\(x) get_positive_sets(df = x, response_column = density_kgkm2)) %>%
+  enframe(name = "species.year", "positive_sets") %>%
+  unnest(col = "positive_sets") %>%
+  separate(species.year, into = c("species", "year"), sep = "\\.") %>%
+  group_by(species) %>%
+  summarise(mean_pos_sets = round(mean(positive_sets), digits = 2))
+
+# arrange(positive_sets, mean_pos_sets) %>% print(n = 40)
+
+# syn_region_colours <- tibble(
+#   region = c("QCS + HS", "WCHG + WCVI", "QCS + HS + WCVI", "QCS + HS + WCHG", "No data"),
+#   colours = c(RColorBrewer::brewer.pal(4L, "Set2"), "grey70")
+# )
 
 # ggplot(data = syn_survey_dat) +
 #   geom_point(aes(x = X, y = Y, colour = survey_abbrev)) +
@@ -101,40 +163,6 @@ syn_nd <-
   rename(area = "cell_area") |>
   make_grid(years = fitted_yrs_extra) |>
   mutate(fyear = as.factor(year))
-
-
-# Arrowtooth & Bocaccio examples
-# ------------------------------------------------------------------------------
-get_syn_index <- function(sp_dat) {
-  future::plan(future::multisession, workers = 5) # or whatever number
-
-  sp_dat <-
-    sp_dat |>
-    group_by(species_common_name) |>
-    group_split()
-
-  map_func <- furrr::future_map
-  # map_func <- purrr::map
-
-  fits1 <- sp_dat |>
-    map_func(
-      fit_models,
-      catch = "catch_weight", silent = FALSE,
-      family = tweedie(), offset = "trawl_offset", data_subset = "data_subset"
-    ) |>
-    list_flatten(name_spec = "{inner}")
-  future::plan(future::sequential)
-
-  fits_cleaned1 <- fits1 |>
-    map(check_sanity) # omit plots made from models that did not pass sanity check
-
-  message("Getting predictions")
-  preds1 <- get_pred_list(fits_cleaned1, newdata = syn_nd)
-  message("Getting index")
-  indices1 <- get_index_list(pred_list = preds1)
-
-  indices1
-}
 
 # ------------------------------------------------------------------------------
 # Synoptic trawl example species
