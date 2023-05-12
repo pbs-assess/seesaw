@@ -62,6 +62,21 @@ fit_models <- function(
   model_ids <- c(model_ids, "st = 'rw'")
   i <- i + 1
 
+  cli::cli_inform("\tFitting 1: st = 'ar1'")
+  fits[[i]] <- try(
+    sdmTMB(
+      eval(parse(text = catch)) ~ 1,
+      family = family,
+      data = dat, time = "year", spatiotemporal = "ar1", spatial = "on",
+      silent = silent, mesh = mesh,
+      offset = offset,
+      extra_time = missing_years,
+      control = ctrl
+    )
+  )
+  model_ids <- c(model_ids, "st = 'ar1'")
+  i <- i + 1
+
   cli::cli_inform("\tFitting 2: st IID covariate")
   fits[[i]] <- try(
     update(fits[[1]],
@@ -212,6 +227,7 @@ fit_models <- function(
       mesh = mesh,
       silent = silent,
       offset = offset,
+      extra_time = missing_years,
       control = ctrl
     )
   )
@@ -226,6 +242,7 @@ fit_models <- function(
       mesh = mesh,
       silent = silent,
       offset = offset,
+      extra_time = missing_years,
       control = ctrl
     )
   )
