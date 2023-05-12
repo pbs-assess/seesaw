@@ -67,12 +67,6 @@ plot_index <- function(df) {
 }
 
 get_syn_index <- function(sp_dat, fit_file, index_file) {
-  # message("Splitting data by species")
-  # sp_dat <-
-  #   sp_dat |>
-  #   group_by(species_common_name) |>
-  #   group_split()
-
   future::plan(future::multisession, workers = 5) # or whatever number
   map_func <- furrr::future_map
   #map_func <- purrr::map
@@ -162,33 +156,83 @@ syn_nd <-
   syn_grid |>
   rename(area = "cell_area") |>
   make_grid(years = fitted_yrs_extra) |>
-  mutate(fyear = as.factor(year))
+  mutate(fyear = as.factor(year)) |>
+  mutate(year_pair = cut(year, seq(min(year), max(year) + 2, 2), right = FALSE))
 
+#distinct(syn_nd, year, year_pair)
+
+# What species to include or exclude
+#spp <- c("shortraker rockfish") # Not enough data to estimate factor year
+#spp <- c("lingcod", "dover sole", "pacific cod", "rex sole", "walleye pollock")
+#spp <- c("petrale sole")
+spp <- c("walleye pollock")
+spp <- c("lingcod", "dover sole", "pacific cod", "rex sole")
+#spp <- c("arrowtooth flounder", "bocaccio", "silvergray rockfish", "yellowtail rockfish")
+fit_dir <- here::here('data-outputs', 'syn', 'fits')
+ind_dir <- here::here('data-outputs', 'syn', 'inds')
+fig_dir <- here::here('figs', 'syn')
 # ------------------------------------------------------------------------------
-# Synoptic trawl example species
-spp <- c("arrowtooth flounder", "bocaccio")
-
 # Strict alternating
 # -----------------------
-sp_dat <- syn_survey_dat |>
-  filter(species_common_name %in% spp) |>
+sp_dat_alt <- syn_survey_dat |>
+  filter((species_common_name %in% spp)) |>
   filter(
     !(year == 2007 & region == "SYN WCHG"),
     !(year == 2020),
     !(year == 2021 & region == "SYN WCVI")
   ) |>
-  mutate(data_subset = paste(species_common_name, "Strict alternating N/S", sep = "-"))
+  mutate(year_pair = cut(year, seq(min(year), max(year) + 2, 2), right = FALSE)) |>
+  mutate(data_subset = paste(species_common_name, "Strict alternating", sep = "-"))
 
-# alternating_ind_list <- get_syn_index(sp_dat)
-# saveRDS(alternating_ind_list, here::here('data-outputs', "syn_strict-alternating_ind-list.RDS"))
-alternating_ind_list <- readRDS(here::here("data-outputs", "syn_strict-alternating_ind-list.RDS"))
+distinct(sp_dat_alt, year, year_pair)
 
-alternating_ind_df <- mk_index_df(alternating_ind_list) |>
+# sp_dat_both <- syn_survey_dat |>
+#   filter((species_common_name %in% spp)) |>
+#   mutate(data_subset = paste(species_common_name, "Additional region sampling", sep = "-"))
+
+sp_dat <- sp_dat_alt |>
+  group_by(data_subset) |>
+  group_split()
+
+ind_list <- get_syn_index(sp_dat,
+#walleye_ind_list <- get_syn_index(sp_dat,
+  fit_file = here::here(fit_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS")),
+  index_file = here::here(ind_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS")))
+beep()
+
+test2 <- mk_index_df(ind_list) |>
   separate(group, into = c("species", "group"), sep = "-") |>
   left_join(syn_survey_yrs, by = "year") |>
-  mutate(region = ifelse(year %% 2 == 0, "QCS + HS", "WCHG + WCVI")) |>
+  mutate(region = case_when(
+    (group == "Strict alternating N/S" & year %% 2 == 0) ~ "QCS + HS",
+    (group == "Strict alternating N/S" & year %% 2 == 1) ~ "WCHG + WCVI"),
+     group == "Additional region sampling" ~ region) |>
   mutate(region = replace(region, year == 2020, "No data")) |>
-  left_join(syn_region_colours, by = "region")
+  left_join(syn_region_colours, by = "region") |>
+  left_join(positive_sets, by = "species") |>
+  filter(mean_pos_sets > 0.06)
+
+plot_index(test2) +
+  facet_wrap(group ~ desc, scales = "free_y")
+  #facet_wrap(paste0(species, "(", mean_pos_sets, ")") ~ desc, scales = "free_y")
+
+
+# alternating_ind_list <- get_syn_index(sp_dat,
+#   fit_file = here::here(fit_dir, paste0("alternating_", paste(spp, collapse = "-"), "_all-mods", ".RDS")),
+#   index_file = here::here(ind_dir, paste0("alternating_", paste(spp, collapse = "-"), "_all-mods", ".RDS")))
+alternating_ind_list <- readRDS(here::here(ind_dir, "alternating_all-mods.RDS"))
+
+# alternating_ind_df <- mk_index_df(alternating_ind_list) |>
+#   separate(group, into = c("species", "group"), sep = "-") |>
+#   left_join(syn_survey_yrs, by = "year") |>
+#   mutate(region = ifelse(year %% 2 == 0, "QCS + HS", "WCHG + WCVI")) |>
+#   mutate(region = replace(region, year == 2020, "No data")) |>
+#   left_join(syn_region_colours, by = "region") |>
+#   left_join(positive_sets, by = "species") |>
+#   filter(mean_pos_sets > 0.06)
+
+# plot_index(alternating_ind_df) +
+#   facet_wrap(paste0(species, "(", mean_pos_sets, ")") ~ desc, scales = "free_y")
 
 # Including broader spatial coverage: 2007 WCHG + QCS/HS & 2021 WCVI + QCS/HS &
 # ------------------------------------------------------------------------------
