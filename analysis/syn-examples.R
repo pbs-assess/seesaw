@@ -166,7 +166,7 @@ syn_nd <-
 # spp <- c("lingcod", "dover sole", "pacific cod", "rex sole", "walleye pollock")
 # spp <- c("petrale sole")
 spp <- c("walleye pollock")
-spp <- c("lingcod", "dover sole", "pacific cod", "rex sole")
+# spp <- c("lingcod", "dover sole", "pacific cod", "rex sole")
 # spp <- c("arrowtooth flounder", "bocaccio", "silvergray rockfish", "yellowtail rockfish")
 fit_dir <- here::here("data-outputs", "syn", "fits")
 ind_dir <- here::here("data-outputs", "syn", "inds")
@@ -184,7 +184,7 @@ sp_dat_alt <- syn_survey_dat |>
   mutate(year_pair = cut(year, seq(min(year), max(year) + 2, 2), right = FALSE)) |>
   mutate(data_subset = paste(species_common_name, "Strict alternating", sep = "-"))
 
-distinct(sp_dat_alt, year, year_pair)
+# distinct(sp_dat_alt, year, year_pair)
 
 # sp_dat_both <- syn_survey_dat |>
 #   filter((species_common_name %in% spp)) |>
@@ -196,18 +196,30 @@ sp_dat <- sp_dat_alt |>
 
 ind_list <- get_syn_index(sp_dat,
   # walleye_ind_list <- get_syn_index(sp_dat,
-  fit_file = here::here(fit_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS")),
-  index_file = here::here(ind_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS"))
+  fit_file = here::here(fit_dir, paste0(paste(spp, collapse = "-"), "_all-mods_2", ".RDS")),
+  index_file = here::here(ind_dir, paste0(paste(spp, collapse = "-"), "_all-mods_2", ".RDS"))
 )
 beep()
 
-test2 <- mk_index_df(ind_list) |>
+ind_df2 <- mk_index_df(ind_list) |>
   separate(group, into = c("species", "group"), sep = "-") |>
   left_join(syn_survey_yrs, by = "year") |>
   mutate(region = ifelse(year %% 2 == 1, "QCS + HS", "WCHG + WCVI")) |>
   mutate(region = replace(region, year == 2020, "No data")) |>
-  left_join(syn_region_colours, by = "region") |>
-  filter(desc != "st IID, (1|region") # This doesn't make sense for strict alternating
+  filter(!(desc %in% c("st IID, (1|region)"))) # This doesn't make sense for strict alternating
+
+seesaw_order <- ind_df2 |>
+  group_by(desc) |>
+  mutate(seesaw = mean(log_est[region == "QCS + HS"]) - mean(log_est[region == "WCHG + WCVI"])) |>
+  summarise(seesaw = seesaw[1]) |>
+  arrange(seesaw) |>
+  select(desc) |>
+  mutate(order = row_number())
+
+left_join(ind_df2, seesaw_order) |>
+  plot_index() +
+  facet_wrap(~ fct_reorder(desc, seesaw_order), scales = "free_y", nrow = 3L) +
+  ggtitle("Walleye Pollock")
 # left_join(positive_sets, by = "species") |>
 # filter(mean_pos_sets > 0.06)
 
