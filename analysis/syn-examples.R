@@ -75,18 +75,17 @@ syn_region_colours <- tibble(
   colours = c(RColorBrewer::brewer.pal(4L, "Set2"), "grey70")
 )
 
-ggplot(data = syn_survey_dat) +
-  geom_point(aes(x = X, y = Y, colour = survey_abbrev)) +
-  scale_colour_manual(
-    values = RColorBrewer::brewer.pal(4L, "Set2"),
-    breaks = c("SYN QCS", "SYN HS", "SYN WCVI", "SYN WCHG"), na.translate = FALSE
-  ) +
-  facet_wrap(~fyear, drop = FALSE)
+# ggplot(data = syn_survey_dat) +
+#   geom_point(aes(x = X, y = Y, colour = survey_abbrev)) +
+#   scale_colour_manual(
+#     values = RColorBrewer::brewer.pal(4L, "Set2"),
+#     breaks = c("SYN QCS", "SYN HS", "SYN WCVI", "SYN WCHG"), na.translate = FALSE
+#   ) +
+#   facet_wrap(~fyear, drop = FALSE)
 
-dir.create('figs')
-ggsave(here::here("figs", "synoptic-survey-coverage.png"), width = 7.5, height = 6.5)
+# dir.create("figs")
+# ggsave(here::here("figs", "synoptic-survey-coverage.png"), width = 7.5, height = 6.5)
 
-# Come back to this because I don't know that the categories are straightforward
 syn_survey_yrs <-
   syn_survey_dat |>
   filter(str_detect(survey_abbrev, "SYN")) |>

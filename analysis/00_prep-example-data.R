@@ -81,3 +81,8 @@ dat <-
   ) |>
   # use complete datasets
   drop_na(depth_m) # drop rows without depths
+
+spp_group_lu <- read_csv(here::here('data-raw', 'spp_to_groups.csv')) |>
+  mutate(across(1:2, tolower))
+
+dat <- left_join(dat, spp_group_lu, by = c('species_common_name' = 'species'))
