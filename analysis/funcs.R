@@ -168,7 +168,7 @@ sim_fit_and_index <- function(n_year,
                               heavy_sd_frac = 0,
                               sample_before_split = FALSE,
                               year_arima.sim = list(ar = 0.5),
-                              make_plots = FALSE,
+                              make_plots = FALSE, save_plots = FALSE,
                               sim_coefs = c(2, 5)) {
   is_even <- function(x) x %% 2 == 0
   if (!is_even(n_year)) cli::cli_abort("Number of years must be even.")
@@ -223,7 +223,8 @@ sim_fit_and_index <- function(n_year,
       blank_theme_elements +
       labs(fill = "True\nsimulated\nlog abundance")
     print(g)
-    # ggsave("stitch/figs/spatio-temporal-truth.pdf", width = 8, height = 5)
+    if (save_plots) ggsave("figs/spatio-temporal-truth.pdf", width = 8, height = 5)
+    if (save_plots) ggsave("figs/spatio-temporal-truth.png", width = 8, height = 5)
   }
 
   # Sample N per year -----------------------------------------------------
@@ -253,7 +254,8 @@ sim_fit_and_index <- function(n_year,
     print(g)
   }
   # # panel.spacing.x = unit(20, "pt")
-  # # ggsave("stitch/figs/spatio-temporal-observed.pdf", width = 8, height = 5)
+  if (save_plots) ggsave("figs/spatio-temporal-observed.pdf", width = 8, height = 5)
+  if (save_plots) ggsave("figs/spatio-temporal-observed.png", width = 8, height = 5)
 
   # Calculate known true biomass/abundance ----------------------------------
 
