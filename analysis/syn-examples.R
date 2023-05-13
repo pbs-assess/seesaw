@@ -67,9 +67,9 @@ plot_index <- function(df) {
 }
 
 get_syn_index <- function(sp_dat, fit_file, index_file) {
-  future::plan(future::multisession, workers = 5) # or whatever number
-  map_func <- furrr::future_map
-  # map_func <- purrr::map
+  # future::plan(future::multisession, workers = 10) # or whatever number
+  # map_func <- furrr::future_map
+  map_func <- purrr::map
   message("Fitting models")
   fits1 <- sp_dat |>
     map_func(
@@ -78,7 +78,7 @@ get_syn_index <- function(sp_dat, fit_file, index_file) {
       family = tweedie(), offset = "trawl_offset", data_subset = "data_subset"
     ) |>
     list_flatten(name_spec = "{inner}")
-  future::plan(future::sequential)
+  # future::plan(future::sequential)
 
   fits_cleaned <- fits1 |>
     map(check_sanity) # omit plots made from models that did not pass sanity check
@@ -197,6 +197,8 @@ sp_dat <- sp_dat_alt |>
   group_by(data_subset) |>
   group_split()
 
+system(paste0("mkdir -p ", ind_dir))
+system(paste0("mkdir -p ", fit_dir))
 ind_list <- get_syn_index(sp_dat,
   fit_file = here::here(fit_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS")),
   index_file = here::here(ind_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS"))
