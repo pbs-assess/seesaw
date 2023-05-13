@@ -24,11 +24,11 @@
 library(sdmTMB)
 library(ggplot2)
 library(dplyr)
-source("stitch/funcs.R")
-dir.create("stitch/figs", showWarnings = FALSE)
+source("analysis/funcs.R")
+dir.create("figs", showWarnings = FALSE)
 # Simulation testing survey stitching with various models -----------------
 
-source(here::here("stitch/scenarios.R"))
+source(here::here("analysis/scenarios.R"))
 if (any(grepl("empty", purrr::map_chr(sc, "label")))) stop("Too many slots")
 labels <- unname(purrr::map_chr(sc, "label"))
 names(sc) <- labels
@@ -46,6 +46,7 @@ sc <- purrr::map(sc, ~ {
 
 
 # testing first:
+out <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = T, save_plots = T))
 out <- do.call(sim_fit_and_index, c(sc[[1]], svc_trend = -1, .seed = 1, make_plots = T))
 out <- do.call(sim_fit_and_index, c(sc[[1]], svc_trend = -0.6, .seed = 2, make_plots = F))
 
