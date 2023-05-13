@@ -31,20 +31,20 @@ fit_models <- function(
   model_ids <- c()
   i <- 1
 
-  message("\tFitting", i, ": spatial only, as.factor(year)")
-  fits[[i]] <- try(
-    sdmTMB(
-      eval(parse(text = catch)) ~ 0 + as.factor(year),
-      family = family,
-      data = dat, time = "year", spatiotemporal = "off", spatial = "on",
-      mesh = mesh,
-      silent = silent,
-      offset = offset,
-      control = ctrl
-    )
-  )
-  model_ids <- c(model_ids, "spatial only, as.factor(year)")
-  i <- i + 1
+  # message("\tFitting", i, ": spatial only, as.factor(year)")
+  # fits[[i]] <- try(
+  #   sdmTMB(
+  #     eval(parse(text = catch)) ~ 0 + as.factor(year),
+  #     family = family,
+  #     data = dat, time = "year", spatiotemporal = "off", spatial = "on",
+  #     mesh = mesh,
+  #     silent = silent,
+  #     offset = offset,
+  #     control = ctrl
+  #   )
+  # )
+  # model_ids <- c(model_ids, "spatial only, as.factor(year)")
+  # i <- i + 1
 
   cli::cli_inform("\tFitting: st RW")
   fits[[i]] <- try(
