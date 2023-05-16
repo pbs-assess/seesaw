@@ -156,8 +156,10 @@ syn_nd <-
   syn_grid |>
   rename(area = "cell_area") |>
   make_grid(years = fitted_yrs_extra) |>
-  mutate(fyear = as.factor(year)) |>
-  mutate(year_pair = cut(year, seq(min(year), max(year) + 2, 2), right = FALSE))
+  mutate(pre_f_year = year) |>
+  mutate(year_pair = cut(year, seq(min(year), max(year) + 2, 2), right = FALSE)) |>
+  mutate(pre_f_year = ifelse(pre_f_year == 2020, 2021, pre_f_year)) |>
+  mutate(fyear = as.factor(pre_f_year))
 
 # distinct(syn_nd, year, year_pair)
 
