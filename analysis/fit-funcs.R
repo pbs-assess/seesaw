@@ -16,7 +16,7 @@ get_pred_list <- function(fit_list, newdata) {
             year %in% unique(.x$data$year)
           ) %>%
           droplevels()
-        out <- predict(.x, newdata = newdata, return_tmb_object = TRUE, extra_time = .x$extra_time)
+        out <- predict(.x, newdata = newdata, return_tmb_object = TRUE)
         out$newdata_input <- newdata
       } else {
         out <- NA
