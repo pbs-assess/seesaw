@@ -168,6 +168,7 @@ syn_nd <-
 # spp <- c("lingcod", "dover sole", "pacific cod", "rex sole", "walleye pollock")
 # spp <- c("petrale sole")
 spp <- c("walleye pollock")
+spp <- c("lingcod")
 # spp <- c("lingcod", "dover sole", "pacific cod", "rex sole")
 # spp <- c("arrowtooth flounder", "bocaccio", "silvergray rockfish", "yellowtail rockfish")
 fit_dir <- here::here("data-outputs", "syn", "fits")
@@ -197,18 +198,29 @@ sp_dat <- sp_dat_alt |>
   group_split()
 
 ind_list <- get_syn_index(sp_dat,
-  # walleye_ind_list <- get_syn_index(sp_dat,
-  fit_file = here::here(fit_dir, paste0(paste(spp, collapse = "-"), "_all-mods_2", ".RDS")),
-  index_file = here::here(ind_dir, paste0(paste(spp, collapse = "-"), "_all-mods_2", ".RDS"))
+  fit_file = here::here(fit_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS")),
+  index_file = here::here(ind_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS"))
 )
 beep()
 
-ind_df2 <- mk_index_df(ind_list) |>
+ling_fits <- readRDS(here::here(fit_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS")))
+
+ling_preds <- get_pred_list(ling_fits, newdata = syn_nd)
+ling_inds <- get_index_list(ling_preds)
+beep()
+
+#ind_list <- readRDS(here::here(fit_dir, paste0(paste(spp, collapse = "-"), "_all-mods", ".RDS")))
+
+ind_df2 <- mk_index_df(ling_inds) |>
   separate(group, into = c("species", "group"), sep = "-") |>
   left_join(syn_survey_yrs, by = "year") |>
   mutate(region = ifelse(year %% 2 == 1, "QCS + HS", "WCHG + WCVI")) |>
-  mutate(region = replace(region, year == 2020, "No data")) |>
-  filter(!(desc %in% c("st IID, (1|region)"))) # This doesn't make sense for strict alternating
+  mutate(region = replace(region, year == 2020, "No data")) #|>
+  #filter(!(desc %in% c("st IID, (1|region)"))) # This doesn't make sense for strict alternating
+
+saveRDS(ind_df2, here::here(fit_dir, paste0(paste(spp, collapse = "-"), "_all-mods_df", ".RDS")))
+
+ind_df2 <- readRDS(here::here(ind_dir, paste0(paste(spp, collapse = "-"), "_all-mods_df", ".RDS")))
 
 seesaw_order <- ind_df2 |>
   group_by(desc) |>
@@ -218,10 +230,16 @@ seesaw_order <- ind_df2 |>
   select(desc) |>
   mutate(order = row_number())
 
+ylim_val <- ind_df2 |>
+  filter(desc == "st RW, time-varying RW") |>
+  slice(which.max(upr)) |>
+  pluck('upr')
+
 left_join(ind_df2, seesaw_order) |>
   plot_index() +
-  facet_wrap(~ fct_reorder(desc, seesaw_order), scales = "free_y", nrow = 3L) +
-  ggtitle("Walleye Pollock")
+  facet_wrap(~ forcats::fct_reorder(desc, order), scales = "fixed", nrow = 3L) +
+  coord_cartesian(ylim = c(0, ylim_val * 1.5)) +
+  ggtitle(spp)
 # left_join(positive_sets, by = "species") |>
 # filter(mean_pos_sets > 0.06)
 
