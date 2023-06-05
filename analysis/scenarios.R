@@ -19,7 +19,7 @@ base <- list(
 )
 
 # N here should match number of scenarios below:
-sc <- purrr::map(seq_len(23L), ~base)
+sc <- purrr::map(seq_len(21L), ~base)
 
 i <- 1
 
@@ -155,16 +155,16 @@ sc[[i]]$heavy_sd_mult <- 3
 sc[[i]]$heavy_sd_frac <- 1/3
 i <- i + 1
 
-# SVC trend from north to south; moderate
-
-sc[[i]]$label <- "SVC trend -0.2"
-sc[[i]]$category <- "SVC"
-sc[[i]]$svc_trend <- -0.2
-i <- i + 1
-
-# SVC trend from north to south; very strong
-
-sc[[i]]$label <- "SVC trend -0.6"
-sc[[i]]$category <- "SVC"
-sc[[i]]$svc_trend <- -0.6
-i <- i + 1
+# # SVC trend from north to south; moderate
+#
+# sc[[i]]$label <- "SVC trend -0.2"
+# sc[[i]]$category <- "SVC"
+# sc[[i]]$svc_trend <- -0.2
+# i <- i + 1
+#
+# # SVC trend from north to south; very strong
+#
+# sc[[i]]$label <- "SVC trend -0.6"
+# sc[[i]]$category <- "SVC"
+# sc[[i]]$svc_trend <- -0.6
+# i <- i + 1

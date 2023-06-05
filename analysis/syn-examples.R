@@ -78,7 +78,6 @@ get_syn_index <- function(sp_dat, fit_file, index_file) {
       family = tweedie(), offset = "trawl_offset", data_subset = "data_subset"
     ) |>
     list_flatten(name_spec = "{inner}")
-  # future::plan(future::sequential)
 
   fits_cleaned <- fits1 |>
     map(check_sanity) # omit plots made from models that did not pass sanity check
@@ -93,6 +92,7 @@ get_syn_index <- function(sp_dat, fit_file, index_file) {
   if (!is.null(index_file)) saveRDS(fits_cleaned, index_file)
 
   indices1
+  # future::plan(future::sequential)
 }
 
 # Setup inside data and look at survey coverage over time

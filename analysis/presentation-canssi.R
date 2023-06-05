@@ -3,7 +3,9 @@ library(ggplot2)
 
 d <- readRDS("~/Downloads/combined_ind_df.RDS")
 d <- readRDS("~/Downloads/walleye pollock_all-mods_df.RDS")
+# d <- readRDS("data-outputs/syn/inds/lingcod_all-mods_2.RDS")
 
+d <- ind_df2
 syn_region_colours <- tibble(
   region = c("QCS + HS", "WCHG + WCVI", "QCS + HS + WCVI", "QCS + HS + WCHG", "No data"),
   colours = c(RColorBrewer::brewer.pal(4L, "Set2"), "grey70"))
@@ -58,14 +60,13 @@ dd |>
   geom_ribbon(alpha = 0.20, colour = NA) +
   scale_colour_manual(values = pal) +
   labs(colour = "Sampled region") +
-  facet_wrap(~desc, scales = "free_y", nrow=2) +
+  facet_wrap(~desc, scales = "free_y", nrow=3) +
   # scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, .05))) +
   # scale_y_log10() +
   ylab("Index (relative biomass)") + xlab("Year") +
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), axis.title.x = element_blank(), legend.position = "top") +
   ggtitle(stringr::str_to_title(unique(dd$species)))
-ggsave("figs/pollock-eg.png", width = 10.5, height = 4.5)
-
+ggsave("figs/lingcod-eg.png", width = 10.5, height = 6)
 
 a <- readRDS("~/src/gfsynopsis-2021/report/data-cache-feb-2023/arrowtooth-flounder.rds")
 a <- a$survey_sets
@@ -78,6 +79,43 @@ ggplot(wchg, aes(longitude, latitude, size = density_kgpm2)) +
   scale_size_area(max_size = 9) +
   guides(size = "none")
 
+dd |>
+  filter(desc == "ST IID, as.factor(year)") |>
+  ggplot(aes(x = year, y = est, ymin = lwr, ymax = upr, colour = region)) +
+  geom_pointrange() +
+  geom_ribbon(alpha = 0.20, colour = NA) +
+  scale_colour_manual(values = pal) +
+  labs(colour = "Sampled region") +
+  # facet_wrap(~desc, scales = "free_y", nrow=3) +
+  # scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, .05))) +
+  # scale_y_log10() +
+  ylab("Index (relative biomass)") + xlab("Year") +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), axis.title.x = element_blank(), legend.position = "top") +
+  ggtitle(stringr::str_to_title(unique(dd$species)))
+ggsave("figs/lingcod-canssi-bad.png", width = 6, height =  4)
+ggsave("figs/pollock-canssi-bad.png", width = 6, height =  4)
 
-wchg
+qb <- readRDS("~/Downloads/qb.rds")
 
+inside_region_colours <- tibble(
+  region = c("HBLL INS N", "HBLL INS S", "Both", "No data"),
+  colours = c(as.character(pal[c(1, 3, 2)]), "grey70")
+)
+
+filter(qb, desc == "st IID, as.factor(year)") |>
+  ggplot(aes(x = year, y = est, ymin = lwr, ymax = upr, colour = region)) +
+  geom_pointrange() +
+  geom_ribbon(alpha = 0.20, colour = NA) +
+  # scale_colour_brewer(palette = "Dark2") +
+  scale_colour_manual(
+    values = inside_region_colours$colours,
+    breaks = inside_region_colours$region, na.translate = FALSE
+  ) +
+  labs(colour = "Sampled region") +
+  # facet_wrap(~desc, scales = "free_y", nrow=3) +
+  # scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, .05))) +
+  # scale_y_log10() +
+  ylab("Index (relative biomass)") + xlab("Year") +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), axis.title.x = element_blank(), legend.position = "top") +
+  ggtitle(stringr::str_to_title(unique(qb$species)))
+ggsave("figs/qb-canssi.png", width = 6, height = 4)

@@ -224,35 +224,35 @@ fit_models <- function(
   model_ids <- c(model_ids, "st IID, (1|year)")
   i <- i + 1
 
-  cli::cli_inform("\tFitting 1: st RW, (1|year)")
-  fits[[i]] <- try(
-    sdmTMB(
-      eval(parse(text = catch)) ~ 1 + (1 | fyear),
-      family = family,
-      data = dat, time = "year", spatiotemporal = "rw", spatial = "on",
-      silent = silent, mesh = mesh,
-      offset = offset,
-      extra_time = missing_years,
-      control = ctrl
-    )
-  )
-  model_ids <- c(model_ids, "st RW, (1|year)")
-  i <- i + 1
+  # cli::cli_inform("\tFitting 1: st RW, (1|year)")
+  # fits[[i]] <- try(
+  #   sdmTMB(
+  #     eval(parse(text = catch)) ~ 1 + (1 | fyear),
+  #     family = family,
+  #     data = dat, time = "year", spatiotemporal = "rw", spatial = "on",
+  #     silent = silent, mesh = mesh,
+  #     offset = offset,
+  #     extra_time = missing_years,
+  #     control = ctrl
+  #   )
+  # )
+  # model_ids <- c(model_ids, "st RW, (1|year)")
+  # i <- i + 1
 
-  cli::cli_inform("\tFitting 1: st AR1, (1|year)")
-  fits[[i]] <- try(
-    sdmTMB(
-      eval(parse(text = catch)) ~ 1 + (1 | fyear),
-      family = family,
-      data = dat, time = "year", spatiotemporal = "ar1", spatial = "on",
-      silent = silent, mesh = mesh,
-      offset = offset,
-      extra_time = missing_years,
-      control = ctrl
-    )
-  )
-  model_ids <- c(model_ids, "st AR1, (1|year)")
-  i <- i + 1
+  # cli::cli_inform("\tFitting 1: st AR1, (1|year)")
+  # fits[[i]] <- try(
+  #   sdmTMB(
+  #     eval(parse(text = catch)) ~ 1 + (1 | fyear),
+  #     family = family,
+  #     data = dat, time = "year", spatiotemporal = "ar1", spatial = "on",
+  #     silent = silent, mesh = mesh,
+  #     offset = offset,
+  #     extra_time = missing_years,
+  #     control = ctrl
+  #   )
+  # )
+  # model_ids <- c(model_ids, "st AR1, (1|year)")
+  # i <- i + 1
 
   cli::cli_inform("\tFitting 8: st IID, (1|region)")
   fits[[i]] <- try(

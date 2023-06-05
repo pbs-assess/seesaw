@@ -46,7 +46,9 @@ sc <- purrr::map(sc, ~ {
 
 
 # testing first:
+out <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1))
 out <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = T, save_plots = T))
+
 out <- do.call(sim_fit_and_index, c(sc[[1]], svc_trend = -1, .seed = 1, make_plots = T))
 out <- do.call(sim_fit_and_index, c(sc[[1]], svc_trend = -0.6, .seed = 2, make_plots = F))
 
