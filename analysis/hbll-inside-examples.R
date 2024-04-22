@@ -6,7 +6,8 @@ library(patchwork)
 
 source(here::here("analysis", "00_prep-example-data.R"))
 source(here::here("analysis", "utils.R"))
-source(here::here("analysis", "fit_model_func.R"))
+source(here::here("analysis", "fit-funcs.R"))
+source(here::here("analysis", "fit-models.R"))
 
 mytheme <- function() ggsidekick::theme_sleek() # sometimes I add more layers to themes
 theme_set(mytheme())
@@ -59,7 +60,7 @@ inside_nd <-
 # ------------------------------------------------------------------------------
 inside_dat <-
   inside_survey_dat |>
-  filter(species_common_name %in% c("quillback rockfish", "yelloweye rockfish")) |>
+  filter(species_common_name %in% c("quillback rockfish")) |>
   mutate(data_subset = paste(species_common_name, "Stitched N/S", sep = "-")) |>
   group_by(species_common_name) |>
   group_split()
@@ -75,7 +76,7 @@ fits1 <- inside_dat |>
 future::plan(future::sequential)
 
 fits_cleaned1 <- fits1 |>
-  map(., check_sanity) # omit plots made from models that did not pass sanity check
+  map(check_sanity) # omit plots made from models that did not pass sanity check
 
 preds1 <- get_pred_list(fits_cleaned1, newdata = inside_nd)
 indices1 <- get_index_list(pred_list = preds1)
@@ -95,7 +96,7 @@ p1 <-
     breaks = inside_region_colours$region, na.translate = FALSE
   ) +
   labs(colour = "Sampled region") +
-  facet_wrap(species ~ fct_reorder(desc, order), nrow = 2L, scales = "free_y") +
+  facet_wrap(species ~ desc, nrow = 2L, scales = "free_y") +
   ggtitle("Stitched N/S - All Years")
 
 # QB and YE inside all years
