@@ -1,3 +1,12 @@
+# add full coverage sampling
+# try with random walk field as truth - does is do OK there??
+# try random walk time series - obs error - state space- fit and simulate over and over
+# does it flatten??
+# free up range
+# fix SD on random walk mean?
+# fitting a square dataset with a round model - title?
+# sept 19 - share range = FALSE!!
+
 # question: same thing happen with missing chunks from one index!?
 
 # To look at:
