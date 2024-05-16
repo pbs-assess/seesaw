@@ -84,6 +84,7 @@ sim <- function(predictor_grid, mesh, phi = 8, seed = 123,
     )
   }
 
+  set.seed(seed * 1029)
   sim_dat <- sdmTMB_simulate(
     formula = formula,
     data = predictor_grid,
@@ -96,7 +97,6 @@ sim <- function(predictor_grid, mesh, phi = 8, seed = 123,
     phi = phi,
     tweedie_p = tweedie_p,
     sigma_O = sigma_O,
-    seed = seed * 1029,
     B = B
   )
   sim_dat$region <- predictor_grid$region
@@ -295,9 +295,12 @@ sim_fit_and_index <- function(n_year,
       return(x)
     }
   }
+  try_sdmTMB <- function(...) {
+    tryCatch(sdmTMB(...), error = function(e) NA)
+  }
 
   cli::cli_inform("Fitting st = 'rw'")
-  fits[[i]] <- sdmTMB(
+  fits[[i]] <- try_sdmTMB(
     observed ~ 1,
     family = tweedie(),
     data = d, time = "year", spatiotemporal = "rw", spatial = "on",
@@ -310,7 +313,7 @@ sim_fit_and_index <- function(n_year,
   i <- i + 1
 
   cli::cli_inform("Fitting st = 'rw' with time-varying RW")
-  fits[[i]] <- sdmTMB(
+  fits[[i]] <- try_sdmTMB(
     observed ~ 0,
     time_varying = ~ 1,
     time_varying_type = "rw",
@@ -327,7 +330,7 @@ sim_fit_and_index <- function(n_year,
   cli::cli_inform("Fitting st = 'rw' with 0.1 time-varying RW")
   # .dim <- if (isTRUE(family$delta)) 2 else 1
   .dim <- 1L
-  fits[[i]] <- sdmTMB(
+  fits[[i]] <- try_sdmTMB(
     observed ~ 0,
     time_varying = ~ 1,
     time_varying_type = "rw",
@@ -348,7 +351,7 @@ sim_fit_and_index <- function(n_year,
   d <- left_join(d, lu, by = join_by(year))
 
   cli::cli_inform("Fitting st = 'rw' with paired year factors")
-  fits[[i]] <- sdmTMB(
+  fits[[i]] <- try_sdmTMB(
     observed ~ 0 + as.factor(year_pairs),
     family = tweedie(),
     data = d, time = "year", spatiotemporal = "rw", spatial = "on",
@@ -361,7 +364,7 @@ sim_fit_and_index <- function(n_year,
   i <- i + 1
 
   cli::cli_inform("Fitting st IID covariate")
-  fits[[i]] <- sdmTMB(
+  fits[[i]] <- try_sdmTMB(
     observed ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2),
     family = tweedie(),
     data = d, time = "year", spatiotemporal = "iid", spatial = "on",
@@ -374,7 +377,7 @@ sim_fit_and_index <- function(n_year,
   i <- i + 1
 
   cli::cli_inform("Fitting st IID s(year)")
-  fits[[i]] <- sdmTMB(
+  fits[[i]] <- try_sdmTMB(
     observed ~ s(year, k = 5),
     family = tweedie(),
     data = d, time = "year", spatiotemporal = "iid", spatial = "on",
@@ -387,7 +390,7 @@ sim_fit_and_index <- function(n_year,
   i <- i + 1
 
   cli::cli_inform("Fitting st IID no covariate as.factor year")
-  fits[[i]] <- sdmTMB(
+  fits[[i]] <- try_sdmTMB(
     observed ~ 0 + as.factor(year),
     family = tweedie(),
     data = d, time = "year", spatiotemporal = "iid", spatial = "on",
@@ -400,7 +403,7 @@ sim_fit_and_index <- function(n_year,
   nms <- c(nms, "IID")
 
   cli::cli_inform("Fitting st time_varying RW")
-  fits[[i]] <- sdmTMB(
+  fits[[i]] <- try_sdmTMB(
     observed ~ 0,
     family = tweedie(),
     time_varying = ~1,
@@ -414,7 +417,7 @@ sim_fit_and_index <- function(n_year,
   nms <- c(nms, "IID RW year")
 
   cli::cli_inform("Fitting st (1|year)")
-  fits[[i]] <- sdmTMB(
+  fits[[i]] <- try_sdmTMB(
     observed ~ 1 + (1 | fyear),
     family = tweedie(),
     data = d, time = "year", spatiotemporal = "iid", spatial = "on",
@@ -427,7 +430,7 @@ sim_fit_and_index <- function(n_year,
   nms <- c(nms, "IID (1|year)")
 
   # cli::cli_inform("Fitting st time_varying AR1")
-  # fits[[i]] <- sdmTMB(
+  # fits[[i]] <- try_sdmTMB(
   #   observed ~ 0,
   #   family = tweedie(),
   #   time_varying = ~1, time_varying_type = "ar1",
@@ -441,7 +444,7 @@ sim_fit_and_index <- function(n_year,
   # nms <- c(nms, "IID AR1 year")
 
   # cli::cli_inform("Fitting spatial only")
-  # fits[[i]] <- sdmTMB(
+  # fits[[i]] <- try_sdmTMB(
   #   observed ~ 0 + as.factor(year),
   #   family = tweedie(),
   #   data = d, time = "year", spatiotemporal = "off", spatial = "on",
@@ -457,7 +460,7 @@ sim_fit_and_index <- function(n_year,
 
   mean_year <- mean(d$year)
   # d$year_cent <- d$year - mean_year
-  # fits[[i]] <- sdmTMB(
+  # fits[[i]] <- try_sdmTMB(
   #   observed ~ 0 + as.factor(year),
   #   family = tweedie(),
   #   data = d, time = "year",
@@ -474,7 +477,7 @@ sim_fit_and_index <- function(n_year,
   #
   # cli::cli_inform("Fitting SVC trend model without ST fields")
 
-  # fits[[i]] <- sdmTMB(
+  # fits[[i]] <- try_sdmTMB(
   #   observed ~ 0 + as.factor(year),
   #   family = tweedie(),
   #   data = d, time = "year",
