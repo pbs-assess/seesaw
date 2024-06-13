@@ -36,7 +36,7 @@ library(sdmTMB)
 library(beepr)
 library(patchwork)
 
-source(here::here("analysis", "00_prep-example-data.R"))
+source(here::here("analysis", "00-prep-example-data.R"))
 source(here::here("analysis", "utils.R"))
 source(here::here("analysis", "fit-models.R"))
 source(here::here("analysis", "fit-funcs.R"))

@@ -1,7 +1,7 @@
 library(dplyr)
 library(ggplot2)
 library(sdmTMB)
-source(here::here("stitch", "utils.R"))
+source(here::here("analysis", "utils.R"))
 
 mytheme <- function() ggsidekick::theme_sleek() +
   theme(panel.grid = element_line(colour = "grey85"),
