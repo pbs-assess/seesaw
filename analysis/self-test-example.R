@@ -1,53 +1,67 @@
-# - simulate with new random fields?? and with full vs. the actual survey coverage... do they substantially differ? (maybe chi-squared test idea from Rufener et al.)
-# - do with underlying IID and with underlying RW... must be self consistent to pass
+# - simulate with new random fields with full vs. the actual survey coverage
+# - do they substantially differ? (maybe chi-squared test idea from Rufener et al.)
+# - do with underlying IID and with underlying RW... must be self consistent
 
 library(dplyr)
 library(ggplot2)
 theme_set(ggsidekick::theme_sleek())
-
-d <- readRDS("~/src/gfsynopsis-2022/report/data-cache-nov-2023/quillback-rockfish.rds")$survey_sets
-d <- filter(d, survey_abbrev %in% c("HBLL INS N", "HBLL INS S"))
-
-glimpse(d)
-
 library(sdmTMB)
 
-d <- filter(d, !(year == 2021 & survey_abbrev %in% "HBLL INS N"))
+# bring in set and grid data ------------------------------------
+
+CASE <- "quillback inside"
+SURVEY <- "inside"
+
+if (CASE == "quillback inside") {
+  d <- readRDS("~/src/gfsynopsis-2022/report/data-cache-nov-2023/quillback-rockfish.rds")$survey_sets
+  d <- filter(d, survey_abbrev %in% c("HBLL INS N", "HBLL INS S"))
+  # simplify, remove N in 2021 (was N + S)
+  d <- filter(d, !(year == 2021 & survey_abbrev %in% "HBLL INS N"))
+  d <- mutate(d, response = catch_count, log_effort = log(hook_count))
+  family <- nbinom2()
+}
+
+if (SURVEY == "inside") {
+  grid1 <- gfplot::hbll_inside_n_grid$grid
+  grid2 <- gfplot::hbll_inside_s_grid$grid
+  grid <- bind_rows(grid1, grid2)
+  grid <- rename(grid, lon = X, lat = Y) |>
+    add_utm_columns(ll_names = c("lon", "lat"))
+}
+
+# fit initial models --------------------------------------------
 
 d <- add_utm_columns(d)
-mesh <- make_mesh(d, c("X", 'Y'), cutoff = 10)
+mesh <- make_mesh(d, c("X", "Y"), cutoff = 10)
 plot(mesh)
 
-# simplify, remove N in 2021 (was N + S)
-
 fit <- sdmTMB(
-  # catch_count ~ 0 + factor(year),
-  catch_count ~ 1,
-  offset = log(d$hook_count),
+  response ~ 1,
+  offset = "log_effort",
   data = d,
   time = "year",
   spatial = "on",
-  spatiotemporal = 'rw',
+  spatiotemporal = "rw",
   mesh = mesh,
   silent = FALSE,
-  family = nbinom2()
+  family = family
 )
 
 fit
 
-fitii <- update(fit, spatiotemporal = "iid", formula. = catch_count ~ 0 + factor(year))
-fitii2 <- update(fit,   control = sdmTMBcontrol(profile = c("ln_phi")), spatiotemporal = "iid", formula. = catch_count ~ 0 + factor(year))
+fitii <- update(
+  fit,
+  spatiotemporal = "iid",
+  formula. = response ~ 0 + factor(year)
+)
+fitii2 <- update(fit,
+  control = sdmTMBcontrol(profile = c("ln_phi")),
+  spatiotemporal = "iid",
+  formula. = response ~ 0 + factor(year)
+)
 
 dy <- group_by(d, year) |>
   summarise(north = grepl("N$", survey_abbrev)[1])
-
-# grid <- gfplot::hbll_grid$grid
-grid1 <- gfplot::hbll_inside_n_grid$grid
-grid2 <- gfplot::hbll_inside_s_grid$grid
-grid <- bind_rows(grid1, grid2)
-
-grid <- rename(grid, lon = X, lat = Y) |>
-  add_utm_columns(ll_names = c("lon", "lat"))
 
 nd <- replicate_df(grid, "year", unique(d$year))
 
@@ -70,7 +84,7 @@ ggplot(indii, aes(year, est, ymin = lwr, ymax = upr, colour = north)) +
   geom_pointrange()
 
 b1 <- tidy(fit)
-b2 <- tidy(fit, 'ran_pars')
+b2 <- tidy(fit, "ran_pars")
 
 omega <- get_pars(fit)$omega_s
 eps <- get_pars(fit)$epsilon_st
@@ -111,14 +125,16 @@ meshs <- make_mesh(locs, c("X", "Y"), mesh = mesh$mesh)
 plot(meshs)
 meshs$mesh$n
 
-ggplot(d, aes(X, Y)) + geom_point() +
+ggplot(d, aes(X, Y)) +
+  geom_point() +
   facet_wrap(~year)
 
-ggplot(locs, aes(X, Y)) + geom_point() +
+ggplot(locs, aes(X, Y)) +
+  geom_point() +
   facet_wrap(~year)
 
 simf <- sdmTMB_simulate(
-  ~ 1,
+  ~1,
   data = locs,
   sigma_O = b2$estimate[b2$term == "sigma_O"],
   sigma_E = b2$estimate[b2$term == "sigma_E"],
@@ -127,9 +143,9 @@ simf <- sdmTMB_simulate(
   fixed_re = list(omega_s = omega, epsilon_st = eps),
   time = "year",
   seed = 12345,
-  family = nbinom2(),
+  family = family,
   mesh = meshs,
-  offset = rep(log(450), nrow(locs)),
+  offset = rep(mean(d$log_effort), nrow(locs)),
   B = unname(coef(fit)) # intercept
 )
 
@@ -139,26 +155,30 @@ simb <- filter(simb, type == "real")
 nrow(simb)
 nrow(simf)
 
-ggplot(simf, aes(X, Y, colour = log(observed))) + geom_point() +
-  facet_wrap(~year) + scale_colour_viridis_c()
+ggplot(simf, aes(X, Y, colour = log(observed))) +
+  geom_point() +
+  facet_wrap(~year) +
+  scale_colour_viridis_c()
 
 mean(simf$observed)
 mean(simf$observed == 0)
-mean(d$catch_count)
-mean(d$catch_count == 0)
+mean(d$response)
+mean(d$response == 0)
 head(simf)
+
+# cross-fit models and simulations and test -----------------------------
 
 mf <- sdmTMB(
   observed ~ 1,
   data = simf,
   time = "year",
   spatial = "on",
-  time_varying = ~ 1,
+  time_varying = ~1,
   time_varying_type = "ar1",
-  spatiotemporal = 'rw',
+  spatiotemporal = "rw",
   mesh = meshs,
   silent = FALSE,
-  family = nbinom2()
+  family = family
 )
 meshb <- make_mesh(simb, c("X", "Y"), mesh = mesh$mesh)
 mb <- sdmTMB(
@@ -166,12 +186,12 @@ mb <- sdmTMB(
   data = simb,
   time = "year",
   spatial = "on",
-  time_varying = ~ 1,
+  time_varying = ~1,
   time_varying_type = "ar1",
-  spatiotemporal = 'rw',
+  spatiotemporal = "rw",
   mesh = meshb,
   silent = FALSE,
-  family = nbinom2()
+  family = family
 )
 
 mfii <- update(mf, spatiotemporal = "iid", formula. = observed ~ 0 + factor(year), time_varying = NULL)
@@ -217,14 +237,14 @@ chi_square <- function(model_full, model_biennial) {
 
   df <- attr(logLik(model_full), "df")
 
-  fixed <- 1 - pchisq( 2 * (f2-f1), df=df )
+  fixed <- 1 - pchisq(2 * (f2 - f1), df = df)
   cat("Fixed theta p-value =", fixed, "\n")
 
   ## Similar test now including random effects
   f1.all <- obj1$env$f(obj1$env$last.par.best)
   f2.all <- obj1$env$f(obj2$env$last.par.best)
   df.all <- df + length(obj1$env$random)
-  random <- 1 - pchisq( 2 * (f2.all-f1.all), df=df.all )
+  random <- 1 - pchisq(2 * (f2.all - f1.all), df = df.all)
 
   cat("Random theta p-value =", random, "\n")
 }
@@ -251,4 +271,3 @@ ggsave("figs/self-cross-test-example.pdf", width = 7, height = 4)
 
 # RW may be over smoothed
 # consider relaxing the smoothing here?
-
