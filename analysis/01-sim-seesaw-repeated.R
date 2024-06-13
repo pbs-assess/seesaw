@@ -49,10 +49,9 @@ sc <- purrr::map(sc, ~ {
   .x
 })
 
-# tictoc::tic()
-# out20 <- do.call(sim_fit_and_index, c(sc[[11]], .seed = 1, make_plots = FALSE))
-# tictoc::toc()
-
+tictoc::tic()
+out20 <- do.call(sim_fit_and_index, c(sc[[11]], .seed = 1, make_plots = FALSE))
+tictoc::toc()
 
 # testing first:
 out <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1))
@@ -93,10 +92,11 @@ out_df <- furrr::future_map_dfr(seeds, function(seed_i) {
 }, .options = furrr::furrr_options(seed = TRUE))
 tictoc::toc()
 out_df2 <- left_join(out_df, lu, by = "label")
-saveRDS(out_df2, "stitch/sawtooth-sim-may3.rds")
+dir.create("data-generated", showWarnings = FALSE)
+saveRDS(out_df2, "data-generated/sawtooth-sim-may3.rds")
 future::plan(future::sequential)
 
-out_df <- readRDS("stitch/sawtooth-sim-may3.rds")
+out_df <- readRDS("data-generated/sawtooth-sim-may3.rds")
 
 # out_df$label <- forcats::fct_inorder(out_df$label)
 
@@ -138,7 +138,7 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 # print(g)
-ggsave("stitch/figs/saw-tooth-scenarios-may3-4.pdf", width = 15, height = 24)
+ggsave("figs/saw-tooth-scenarios-may3-4.pdf", width = 15, height = 24)
 
 # Look at one point in space... -------------------------------------------
 
@@ -232,7 +232,7 @@ g <- temp |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
-ggsave("stitch/figs/saw-tooth-metrics-all-May3.pdf", width = 7, height = 25)
+ggsave("figs/saw-tooth-metrics-all-May3.pdf", width = 7, height = 25)
 
 # ---------------------------------------------------------------------
 # together in one set of panels?
@@ -251,8 +251,7 @@ g <- temp |>
   ylab("Metric value") +
   coord_flip()
 g
-ggsave("stitch/figs/saw-tooth-metrics-condensed-dec14.pdf", width = 6.8, height = 3)
-
+ggsave("figs/saw-tooth-metrics-condensed-dec14.pdf", width = 6.8, height = 3)
 
 # ----------------------
 
@@ -281,7 +280,7 @@ temp |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey95"), axis.title.y.left = element_blank()) +
   xlab("Seesaw metric")
-ggsave("stitch/figs/saw-tooth-bad-iid-dec14.pdf", width = 4.2, height = 4.5)
+ggsave("figs/saw-tooth-bad-iid-dec14.pdf", width = 4.2, height = 4.5)
 
 # Figures
 # Spatial setup example
