@@ -1,5 +1,6 @@
-sim_ar1_heavy <- function(n, marginal_sd, rho, mu = 0,
-  heavy_sd_mult = 1, heavy_sd_frac = 0, s = 42) {
+sim_ar1_heavy <- function(
+    n, marginal_sd, rho, mu = 0,
+    heavy_sd_mult = 1, heavy_sd_frac = 0, s = 42) {
   sigma <- sqrt(1 - rho^2)
   set.seed(s)
   devs <- rnorm(n) * marginal_sd
@@ -12,19 +13,19 @@ sim_ar1_heavy <- function(n, marginal_sd, rho, mu = 0,
   B[1] <- rho * x0 + sigma * devs[1]
   for (i in seq(2, length(B))) {
     this_dev <- if (hd[i] == 0) devs[i] else devs_heavy[i]
-    B[i] <- rho * B[i-1] + sigma * this_dev
+    B[i] <- rho * B[i - 1] + sigma * this_dev
   }
   B + mu
 }
 
-sim <- function(predictor_grid, mesh, phi = 8, seed = 123,
-                region_cutoff = 0.5, rho = 0, sigma_E = 0.4, range = 0.8, tweedie_p = 1.6,
-                sigma_O = 1.6, coefs = c(2.2, 3.8), year_mean = 1, north_effect = 0,
-                year_arima.sim = list(ar = 0.8), year_marginal_sd = 0.2,
-                svc_trend = 0,
-                heavy_sd_mult = 1,
-                heavy_sd_frac = 0) {
-
+sim <- function(
+    predictor_grid, mesh, phi = 8, seed = 123,
+    region_cutoff = 0.5, rho = 0, sigma_E = 0.4, range = 0.8, tweedie_p = 1.6,
+    sigma_O = 1.6, coefs = c(2.2, 3.8), year_mean = 1, north_effect = 0,
+    year_arima.sim = list(ar = 0.8), year_marginal_sd = 0.2,
+    svc_trend = 0,
+    heavy_sd_mult = 1,
+    heavy_sd_frac = 0) {
   predictor_grid$region <- NA
   predictor_grid$region[predictor_grid$Y < region_cutoff] <- "south"
   predictor_grid$region[predictor_grid$Y >= region_cutoff] <- "north"
@@ -107,10 +108,10 @@ sim <- function(predictor_grid, mesh, phi = 8, seed = 123,
 
 # sample_before_split = TRUE means apply sample_n first, then discard any gap
 # smaple_before_split = FALSE applies sample_n *after* cutting gap
-observe <- function(sim_dat, sample_n = 300L, seed = 10282, gap = 0, region_cutoff = 0.5,
-                    north_yrs = seq(1, 9, 2), south_yrs = seq(2, 10, 2),
-                    sample_before_split = FALSE) {
-
+observe <- function(
+    sim_dat, sample_n = 300L, seed = 10282, gap = 0, region_cutoff = 0.5,
+    north_yrs = seq(1, 9, 2), south_yrs = seq(2, 10, 2),
+    sample_before_split = FALSE) {
   assertthat::assert_that(gap >= 0 && gap <= 0.99)
   assertthat::assert_that(sample_n > 1L)
   assertthat::assert_that(all(north_yrs %in% sim_dat$year) &&
@@ -149,27 +150,30 @@ observe <- function(sim_dat, sample_n = 300L, seed = 10282, gap = 0, region_cuto
   d
 }
 
-sim_fit_and_index <- function(n_year,
-                              .seed,
-                              gap_size = 0.3,
-                              obs_sampled_size = 400L,
-                              year_marginal_sd = 0.5,
-                              obs_yrs = list(
-                                north_yrs = seq(1, n_year - 1, 2),
-                                south_yrs = seq(2, n_year, 2)
-                              ),
-                              phi = 8,
-                              region_cutoff = 0.5,
-                              range = 0.5,
-                              sigma_O = 1,
-                              sigma_E = 0.5,
-                              svc_trend = 0,
-                              heavy_sd_mult = 1,
-                              heavy_sd_frac = 0,
-                              sample_before_split = FALSE,
-                              year_arima.sim = list(ar = 0.5),
-                              make_plots = FALSE, save_plots = FALSE,
-                              sim_coefs = c(2, 5)) {
+sim_fit_and_index <- function(
+    n_year,
+    .seed,
+    gap_size = 0.3,
+    obs_sampled_size = 400L,
+    year_marginal_sd = 0.5,
+    obs_yrs = list(
+      north_yrs = seq(1, n_year - 1, 2),
+      south_yrs = seq(2, n_year, 2)
+    ),
+    phi = 8,
+    region_cutoff = 0.5,
+    range = 0.5,
+    sigma_O = 1,
+    sigma_E = 0.5,
+    svc_trend = 0,
+    heavy_sd_mult = 1,
+    heavy_sd_frac = 0,
+    sample_before_split = FALSE,
+    year_arima.sim = list(ar = 0.5),
+    make_plots = FALSE,
+    save_plots = FALSE,
+    return_fits = FALSE, return_preds = FALSE, return_sim_dat = FALSE,
+    sim_coefs = c(2, 5)) {
   is_even <- function(x) x %% 2 == 0
   if (!is_even(n_year)) cli::cli_abort("Number of years must be even.")
 
@@ -209,10 +213,12 @@ sim_fit_and_index <- function(n_year,
       geom_line()
     print(g)
 
-    blank_theme_elements <- theme(panel.grid.major = element_line(colour = "grey90"),
+    blank_theme_elements <- theme(
+      panel.grid.major = element_line(colour = "grey90"),
       # panel.spacing.x = unit(20, "pt"),
       axis.text = element_blank(), axis.ticks = element_blank(),
-      axis.title = element_blank(), legend.position = "right")
+      axis.title = element_blank(), legend.position = "right"
+    )
 
     g <- ggplot(sim_dat, aes(X, Y, fill = eta)) +
       geom_raster() +
@@ -253,7 +259,6 @@ sim_fit_and_index <- function(n_year,
       theme(panel.grid.major = element_line(colour = "grey90"))
     print(g)
   }
-  # # panel.spacing.x = unit(20, "pt")
   if (save_plots) ggsave("figs/spatio-temporal-observed.pdf", width = 8, height = 5)
   if (save_plots) ggsave("figs/spatio-temporal-observed.png", width = 8, height = 5)
 
@@ -261,6 +266,9 @@ sim_fit_and_index <- function(n_year,
 
   regions_samp <- select(d, year, sampled_region) %>% distinct()
 
+  if (return_sim_dat) {
+    return(sim_dat)
+  }
   actual <- group_by(sim_dat, year) %>%
     summarise(total = sum(mu)) |>
     left_join(regions_samp, by = "year")
@@ -271,7 +279,9 @@ sim_fit_and_index <- function(n_year,
     print(g)
   }
 
-  if (make_plots) return(NULL)
+  if (make_plots) {
+    return(NULL)
+  }
 
   # Fit models --------------------------------------------------------------
 
@@ -315,7 +325,7 @@ sim_fit_and_index <- function(n_year,
   cli::cli_inform("Fitting st = 'rw' with time-varying RW")
   fits[[i]] <- try_sdmTMB(
     observed ~ 0,
-    time_varying = ~ 1,
+    time_varying = ~1,
     time_varying_type = "rw",
     family = tweedie(),
     data = d, time = "year", spatiotemporal = "rw", spatial = "on",
@@ -332,7 +342,7 @@ sim_fit_and_index <- function(n_year,
   .dim <- 1L
   fits[[i]] <- try_sdmTMB(
     observed ~ 0,
-    time_varying = ~ 1,
+    time_varying = ~1,
     time_varying_type = "rw",
     family = tweedie(),
     data = d, time = "year", spatiotemporal = "rw", spatial = "on",
@@ -378,7 +388,7 @@ sim_fit_and_index <- function(n_year,
 
   cli::cli_inform("Fitting st IID s(year)")
   fits[[i]] <- try_sdmTMB(
-    observed ~ s(year, k = 5),
+    observed ~ s(year),
     family = tweedie(),
     data = d, time = "year", spatiotemporal = "iid", spatial = "on",
     silent = TRUE, mesh = mesh,
@@ -443,22 +453,22 @@ sim_fit_and_index <- function(n_year,
   # i <- i + 1
   # nms <- c(nms, "IID AR1 year")
 
-  # cli::cli_inform("Fitting spatial only")
-  # fits[[i]] <- try_sdmTMB(
-  #   observed ~ 0 + as.factor(year),
-  #   family = tweedie(),
-  #   data = d, time = "year", spatiotemporal = "off", spatial = "on",
-  #   mesh = mesh,
-  #   priors = priors,
-  #   control = ctl
-  # )
-  # fits[[i]] <- check_sanity(fits[[i]])
-  # i <- i + 1
-  # nms <- c(nms, "Spatial only")
-  #
-  # cli::cli_inform("Fitting SVC trend model")
+  cli::cli_inform("Fitting spatial only")
+  fits[[i]] <- try_sdmTMB(
+    observed ~ 0 + as.factor(year),
+    family = tweedie(),
+    data = d, time = "year", spatiotemporal = "off", spatial = "on",
+    mesh = mesh,
+    priors = priors,
+    control = ctl
+  )
+  fits[[i]] <- check_sanity(fits[[i]])
+  i <- i + 1
+  nms <- c(nms, "Spatial only")
 
-  mean_year <- mean(d$year)
+  # cli::cli_inform("Fitting SVC trend model")
+  #
+  # mean_year <- mean(d$year)
   # d$year_cent <- d$year - mean_year
   # fits[[i]] <- try_sdmTMB(
   #   observed ~ 0 + as.factor(year),
@@ -474,9 +484,9 @@ sim_fit_and_index <- function(n_year,
   # fits[[i]] <- check_sanity(fits[[i]])
   # i <- i + 1
   # nms <- c(nms, "SVC trend, IID fields")
-  #
-  # cli::cli_inform("Fitting SVC trend model without ST fields")
 
+  # cli::cli_inform("Fitting SVC trend model without ST fields")
+  #
   # fits[[i]] <- try_sdmTMB(
   #   observed ~ 0 + as.factor(year),
   #   family = tweedie(),
@@ -491,15 +501,18 @@ sim_fit_and_index <- function(n_year,
   # fits[[i]] <- check_sanity(fits[[i]])
   # i <- i + 1
   # nms <- c(nms, "SVC trend, spatial only")
-  #
-  # names(fits) <- nms
+
+  names(fits) <- nms
+  if (return_fits) {
+    return(fits)
+  }
 
   # Predict on grid and calculate indexes -----------------------------------
 
   cli::cli_alert_success("Calculating indices...")
   nd <- select(predictor_dat, X, Y, year, fyear, region)
   nd$depth_cov <- nd$Y
-  nd$year_cent <- nd$year - mean_year
+  # nd$year_cent <- nd$year - mean_year
 
   nd <- left_join(nd, lu, by = join_by(year))
 
@@ -511,6 +524,9 @@ sim_fit_and_index <- function(n_year,
     }
     out
   })
+  if (return_preds) {
+    return(preds)
+  }
 
   indexes <- purrr::map(preds, function(.x) {
     if (length(.x) > 1) {
@@ -528,4 +544,3 @@ sim_fit_and_index <- function(n_year,
     mutate(seed = .seed)
   indexes_df
 }
-
