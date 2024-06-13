@@ -4,7 +4,7 @@ library(sdmTMB)
 library(beepr)
 library(patchwork)
 
-source(here::here("analysis", "00_prep-example-data.R"))
+source(here::here("analysis", "00-prep-example-data.R"))
 source(here::here("analysis", "utils.R"))
 source(here::here("analysis", "fit-funcs.R"))
 source(here::here("analysis", "fit-models.R"))
@@ -80,7 +80,7 @@ fits_cleaned1 <- fits1 |>
 
 preds1 <- get_pred_list(fits_cleaned1, newdata = inside_nd)
 indices1 <- get_index_list(pred_list = preds1)
-beep()
+# beep()
 
 index_df1 <-
   mk_index_df(indices1) |>
@@ -124,7 +124,7 @@ fits_cleaned2 <- fits2 |>
 
 preds2 <- get_pred_list(fits_cleaned2, newdata = inside_nd)
 indices2 <- get_index_list(pred_list = preds2)
-beep()
+# beep()
 
 index_df2 <-
   mk_index_df(indices2) |>
@@ -141,7 +141,7 @@ p2 <-
     breaks = inside_region_colours$region, na.translate = FALSE
   ) +
   labs(colour = "Sampled region") +
-  facet_wrap(species ~ fct_reorder(desc, order), nrow = 2L, scales = "free_y") +
+  facet_wrap(species ~ desc, nrow = 2L, scales = "free_y") +
   ggtitle("Stitched N/S - No 2021")
 
 p1 / p2

@@ -2,7 +2,7 @@ library(tidyverse)
 library(sdmTMB)
 library(patchwork)
 
-source(here::here("analysis", "00_prep-example-data.R"))
+source(here::here("analysis", "00-prep-example-data.R"))
 source(here::here("analysis", "utils.R"))
 source(here::here("analysis", "fit-funcs.R"))
 source(here::here("analysis", "fit-models.R"))
@@ -61,7 +61,7 @@ indices1 <- get_index_list(pred_list = preds1) %>%
   setNames(names(fits_cleaned1))
 
 future::plan(future::sequential)
-beep()
+# beep()
 
 # temp:
 lu <- tibble(id = seq_along(ids), desc = ids, order = as.integer(id))
