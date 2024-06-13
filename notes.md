@@ -4,11 +4,13 @@
 
 **Seesaw vs. sawtooth??**
 
+A warning...
+
 Seesaw year effects in index standardization: why they happen and how to avoid them
 
 Data integration across scientific surveys: what causes oscillating year effects and how to avoid them
 
-A cautionary tale about spatiotemporal index standardization with irregular sampling
+A warning about spatiotemporal index standardization with irregular sampling
 
 ## Journals
 
@@ -96,4 +98,10 @@ S1. Examples of where this happens worldwide
 
 S1. full matrix of simulation examples (~3 replicates?)
 S2. extra examples on real data
+
+## How to diagnose?
+
+- simulate... test if happens
+- demo this?
+- fit RW, simulate, apply sampling design, test approach
 
