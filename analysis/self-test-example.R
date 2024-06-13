@@ -3,17 +3,22 @@
 
 library(dplyr)
 library(ggplot2)
+theme_set(ggsidekick::theme_sleek())
 
-d <- readRDS("~/src/gfsynopsis-2021/report/data-cache-nov-2023/quillback-rockfish.rds")$survey_sets
-d <- filter(d, survey_abbrev %in% c("HBLL OUT N", "HBLL OUT S"))
+d <- readRDS("~/src/gfsynopsis-2022/report/data-cache-nov-2023/quillback-rockfish.rds")$survey_sets
+d <- filter(d, survey_abbrev %in% c("HBLL INS N", "HBLL INS S"))
 
 glimpse(d)
 
 library(sdmTMB)
 
+d <- filter(d, !(year == 2021 & survey_abbrev %in% "HBLL INS N"))
+
 d <- add_utm_columns(d)
-mesh <- make_mesh(d, c("X", 'Y'), cutoff = 15)
+mesh <- make_mesh(d, c("X", 'Y'), cutoff = 10)
 plot(mesh)
+
+# simplify, remove N in 2021 (was N + S)
 
 fit <- sdmTMB(
   # catch_count ~ 0 + factor(year),
@@ -30,21 +35,38 @@ fit <- sdmTMB(
 
 fit
 
+fitii <- update(fit, spatiotemporal = "iid", formula. = catch_count ~ 0 + factor(year))
+fitii2 <- update(fit,   control = sdmTMBcontrol(profile = c("ln_phi")), spatiotemporal = "iid", formula. = catch_count ~ 0 + factor(year))
+
 dy <- group_by(d, year) |>
   summarise(north = grepl("N$", survey_abbrev)[1])
 
-grid <- gfplot::hbll_grid$grid
+# grid <- gfplot::hbll_grid$grid
+grid1 <- gfplot::hbll_inside_n_grid$grid
+grid2 <- gfplot::hbll_inside_s_grid$grid
+grid <- bind_rows(grid1, grid2)
+
 grid <- rename(grid, lon = X, lat = Y) |>
   add_utm_columns(ll_names = c("lon", "lat"))
 
 nd <- replicate_df(grid, "year", unique(d$year))
 
 p <- predict(fit, newdata = nd, return_tmb_object = TRUE)
+pii <- predict(fitii, newdata = nd, return_tmb_object = TRUE)
 ind <- get_index(p, bias_correct = TRUE)
 
+pii2 <- predict(fitii2, newdata = nd, return_tmb_object = TRUE)
+ind2 <- get_index(pii2, bias_correct = TRUE)
+
+indii <- get_index(pii, bias_correct = TRUE)
+
 ind <- left_join(ind, dy)
+indii <- left_join(indii, dy)
 
 ggplot(ind, aes(year, est, ymin = lwr, ymax = upr, colour = north)) +
+  geom_pointrange()
+
+ggplot(indii, aes(year, est, ymin = lwr, ymax = upr, colour = north)) +
   geom_pointrange()
 
 b1 <- tidy(fit)
@@ -55,13 +77,14 @@ eps <- get_pars(fit)$epsilon_st
 
 # want to create fake sampling in the unsampled region in a given year
 # want to see if IID and RW give plausibly similar indexes in partial vs. full sampling
-# to create these fake sampling locations, quick hack is to take sampling locations randomly from another sampled year
+# to create these fake sampling locations, quick hack is to take sampling
+# locations randomly from another sampled year
 
 group_by(d, year) |>
   summarise(n = n())
 
 get_random_year_samples <-
-  function(data, .survey_abbrev = c("HBLL OUT N", "HBLL OUT S")) {
+  function(data, .survey_abbrev = c("HBLL INS N", "HBLL INS S")) {
     .survey_abbrev <- match.arg(.survey_abbrev)
     dd <- filter(data, survey_abbrev %in% .survey_abbrev)
     yrs <- unique(dd$year)
@@ -76,7 +99,7 @@ locs <- group_by(d, year) |>
   purrr::map(\(.x) {
     real_loc <- select(.x, X, Y, year) |> mutate(type = "real")
     region <- unique(.x$survey_abbrev)
-    other_region <- if (region == "HBLL OUT N") "HBLL OUT S" else "HBLL OUT N"
+    other_region <- if (region == "HBLL INS N") "HBLL INS S" else "HBLL INS N"
     other_loc <- get_random_year_samples(d, other_region) |>
       mutate(type = "fake") |>
       mutate(year = unique(.x$year))
@@ -130,6 +153,8 @@ mf <- sdmTMB(
   data = simf,
   time = "year",
   spatial = "on",
+  time_varying = ~ 1,
+  time_varying_type = "ar1",
   spatiotemporal = 'rw',
   mesh = meshs,
   silent = FALSE,
@@ -141,14 +166,16 @@ mb <- sdmTMB(
   data = simb,
   time = "year",
   spatial = "on",
+  time_varying = ~ 1,
+  time_varying_type = "ar1",
   spatiotemporal = 'rw',
   mesh = meshb,
   silent = FALSE,
   family = nbinom2()
 )
 
-mfii <- update(mf, spatiotemporal = "iid", formula. = observed ~ 0 + factor(year))
-mbii <- update(mb, spatiotemporal = "iid", formula. = observed ~ 0 + factor(year))
+mfii <- update(mf, spatiotemporal = "iid", formula. = observed ~ 0 + factor(year), time_varying = NULL)
+mbii <- update(mb, spatiotemporal = "iid", formula. = observed ~ 0 + factor(year), time_varying = NULL)
 
 pf <- predict(mf, newdata = nd, return_tmb_object = TRUE)
 pb <- predict(mb, newdata = nd, return_tmb_object = TRUE)
@@ -170,3 +197,58 @@ ii <- bind_rows(
 ggplot(ii, aes(year, est, ymin = lwr, ymax = upr, colour = north)) +
   geom_pointrange() +
   facet_wrap(~type)
+
+chi_square <- function(model_full, model_biennial) {
+  ## as in Rufener, M.-C., Kristensen, K., Nielsen, J.R., and Bastardie, F.
+  ## 2021. Bridging the gap between commercial fisheries and survey data to
+  ## model the spatiotemporal dynamics of marine species. Ecological
+  ## Applications 31(8): e02453. doi:10.1002/eap.2453.
+  ## https://github.com/mcruf/LGNB/blob/master/R/Validation_and_Residuals.R
+  par1 <- model_biennial$model$par
+  par2 <- model_full$model$par
+  obj1 <- model_biennial$tmb_obj
+  obj2 <- model_full$tmb_obj
+
+  ## Evaluate biennial likelihood from biennial model parameters
+  obj1$env$beSilent()
+  f1 <- as.numeric(obj1$fn(par1))
+  ## Evaluate biennial likelihood from full model parameters
+  f2 <- as.numeric(obj1$fn(par2))
+
+  df <- attr(logLik(model_full), "df")
+
+  fixed <- 1 - pchisq( 2 * (f2-f1), df=df )
+  cat("Fixed theta p-value =", fixed, "\n")
+
+  ## Similar test now including random effects
+  f1.all <- obj1$env$f(obj1$env$last.par.best)
+  f2.all <- obj1$env$f(obj2$env$last.par.best)
+  df.all <- df + length(obj1$env$random)
+  random <- 1 - pchisq( 2 * (f2.all-f1.all), df=df.all )
+
+  cat("Random theta p-value =", random, "\n")
+}
+
+chi_square(mfii, mbii)
+chi_square(mf, mb)
+
+# conclusions:
+# - random walk random field is consistent with biennial or full sampling
+# - IID does not (when including random effects)
+
+ii |>
+  mutate(biennial = grepl("biennial", type)) |>
+  mutate(iid = paste("Random walk random field: ", !grepl("IID", type))) |>
+  ggplot(aes(year, est, ymin = lwr, ymax = upr, shape = north, colour = biennial)) +
+  geom_pointrange(position = position_dodge(width = 0.5)) +
+  scale_shape_manual(values = c("FALSE" = 21, "TRUE" = 19)) +
+  scale_colour_brewer(palette = "Set2") +
+  facet_wrap(~iid) +
+  labs(colour = "Biennial sampling", shape = "Northern region sampled\n(if biennial)", x = "Year", y = "Relative abundance") +
+  theme(legend.position = "bottom")
+
+ggsave("figs/self-cross-test-example.pdf", width = 7, height = 4)
+
+# RW may be over smoothed
+# consider relaxing the smoothing here?
+
