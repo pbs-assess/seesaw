@@ -99,9 +99,26 @@ S1. Examples of where this happens worldwide
 S1. full matrix of simulation examples (~3 replicates?)
 S2. extra examples on real data
 
-## How to diagnose?
+## How to diagnose / guidance?
 
-- simulate... test if happens
-- demo this?
-- fit RW, simulate, apply sampling design, test approach
+- first consider carefully any sampling design deviations or systematic changes
+- visualize and slice and dice index: is there a pattern with respect to these changes?
+  - easier in some cases than others depending on how systematic the changes
+- cross-simulation test:
+- fit RW, simulate, apply sampling design, test approaches
+  - if we can reproduce the same pattern with IID model applied to simulated
+    RW field data (or otherwise 'neutral' data) then we have a problem
+- apply the least restrictive model possible to obtain sufficient penalization of time to put the appropriate variation into space:
+    - independent years with IID fields
+    - random walk years with IID fields
+    - random walk years with random walk fields
+    - random walk fields alone
+    - other autoregressive such as AR1 or smoothers also possible but: AR1 (careful doesn't estimate negative and accentuate); smoothers (careful about over smoothing and careful about any forecasts outside range of fitted data)
+- at the very least, the result should:
+  - make sense and not show pattern with sampling design that can't be otherwise explained
+  - be self consistent (should be able to recover itself)
+  - not induce temporal patterns from a simulated dataset simulated with neutral patterns
+    
+
+
 
