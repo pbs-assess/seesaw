@@ -69,18 +69,22 @@ mesh <- make_mesh(d, c("X", "Y"), cutoff = 15)
 plot(mesh)
 
 fit <- sdmTMB(
-  observed ~ 1,
+  observed ~1,
   offset = "log_effort",
   data = d,
   time = "year",
   spatial = "on",
+  time_varying = ~1,
+  time_varying_type = "rw0",
+  priors = sdmTMBpriors(sigma_V = gamma_cv(0.2, 0.5)),
+  control = sdmTMBcontrol(multiphase = FALSE),
   spatiotemporal = "rw",
   mesh = mesh,
   silent = FALSE,
   family = family
 )
 fit
-sanity(fit, gradient_thresh = 0.01)
+sanity(fit)
 
 # fitii <- update(
 #   fit,
@@ -155,10 +159,6 @@ locs <- group_by(d, year) |>
   }) |>
   bind_rows()
 
-meshs <- make_mesh(locs, c("X", "Y"), mesh = mesh$mesh)
-plot(meshs)
-meshs$mesh$n
-
 ggplot(d, aes(X, Y)) +
   geom_point() +
   facet_wrap(~year)
@@ -167,32 +167,70 @@ ggplot(locs, aes(X, Y, colour = type)) +
   geom_point(alpha = 0.8, pch = ".") +
   facet_wrap(~year)
 
+locs_combined <- bind_rows(locs, select(nd, X, Y, year) |> mutate(type = "grid"))
+
+meshs <- make_mesh(locs_combined, c("X", "Y"), mesh = mesh$mesh)
+plot(meshs$mesh)
+meshs$mesh$n
+
+# set.seed(123)
+# year_effects <- numeric(length(unique(d$year)))
+# (sigma_V <- as.numeric(fit$tmb_obj$report()$sigma_V))
+# year_effects[1] <- unname(coef(fit)) + rnorm(1, 0, sigma_V)
+# for (i in 2:length(year_effects)) {
+#   year_effects[i] <- year_effects[i-1] + rnorm(1, 0, sigma_V)
+# }
+# plot(year_effects)
+
+e <- as.list(fit$sd_report, "Estimate")
+year_effects <- e$b_rw_t[,,1]
+plot(exp(year_effects))
+
 simf <- sdmTMB_simulate(
-  ~1,
-  data = locs,
+  ~ 0 + as.factor(year),
+  data = locs_combined,
   sigma_O = b2$estimate[b2$term == "sigma_O"],
   sigma_E = b2$estimate[b2$term == "sigma_E"],
   phi = b2$estimate[b2$term == "phi"],
+  tweedie_p = b2$estimate[b2$term == "tweedie_p"],
   range = b2$estimate[b2$term == "range"],
-  fixed_re = list(omega_s = omega, epsilon_st = eps),
+  fixed_re = list(omega_s = omega),
+  spatiotemporal = "ar1",
+  rho = 0.9,
   time = "year",
-  seed = 12345,
+  seed = 123,
   family = family,
   mesh = meshs,
-  offset = rep(mean(d$log_effort), nrow(locs)),
-  B = unname(coef(fit)) # intercept
+  # offset = 1,
+  B = year_effects
 )
 
+simf$type <- locs_combined$type
 simb <- simf
-simb$type <- locs$type
 simb <- filter(simb, type == "real")
-nrow(simb)
+simg <- filter(simf, type == "grid")
+simf <- filter(simf, type %in% c("real", "fake"))
 nrow(simf)
+nrow(simb)
+nrow(simg)
 
 ggplot(simf, aes(X, Y, colour = log(observed + 1))) +
   geom_point() +
   facet_wrap(~year) +
   scale_colour_viridis_c()
+
+ggplot(simg, aes(X, Y, fill = log(observed + 1))) +
+  geom_tile(width = 2, height = 2) +
+  facet_wrap(~year) +
+  scale_fill_viridis_c()
+
+true_index <- simg |> group_by(year) |>
+  summarise(est = sum(mu)) |>
+  mutate(type = "True")
+
+true_index |>
+  ggplot(aes(year, est)) + geom_line() +
+  labs(y = "True population index")
 
 ggplot(simb, aes(X, Y, colour = log(observed + 1))) +
   geom_point() +
@@ -203,18 +241,24 @@ mean(simf$observed)
 mean(simf$observed == 0)
 mean(d$observed)
 mean(d$observed == 0)
-head(simf)
 
 # cross-fit models and simulations and test -----------------------------
 
+sigma_V <- seq(0, 1, length.out = 500L)
+p <- gamma_cv(0.2, 0.5)
+plot(sigma_V, dgamma(sigma_V, shape = p[1], scale = p[2]), type = "l")
+sdmTMBpriors(sigma_V = gamma_cv(0.2, 0.5))
+
+meshs <- make_mesh(simf, c("X", "Y"), mesh = mesh$mesh)
 mf <- sdmTMB(
   observed ~ 1,
   data = simf,
   time = "year",
   spatial = "on",
-  # time_varying = ~1,
-  # time_varying_type = "ar1",
-  spatiotemporal = "rw",
+  time_varying = ~1,
+  time_varying_type = "rw0",
+  priors = sdmTMBpriors(sigma_V = gamma_cv(0.2, 0.5)),
+  spatiotemporal = "ar1",
   mesh = meshs,
   silent = FALSE,
   family = family
@@ -225,16 +269,18 @@ mb <- sdmTMB(
   data = simb,
   time = "year",
   spatial = "on",
-  # time_varying = ~1,
-  # time_varying_type = "ar1",
-  spatiotemporal = "rw",
+  time_varying = ~1,
+  time_varying_type = "rw0",
+  priors = sdmTMBpriors(sigma_V = gamma_cv(0.2, 0.5)),
+  # control = sdmTMBcontrol(start = list(ln_tau_V = get_pars(mf)$ln_tau_V), map = list(ln_tau_V = factor(NA))),
+  spatiotemporal = "ar1",
   mesh = meshb,
   silent = FALSE,
   family = family
 )
 
-mfii <- update(mf, spatiotemporal = "iid", formula. = observed ~ 0 + factor(year), time_varying = NULL)
-mbii <- update(mb, spatiotemporal = "iid", formula. = observed ~ 0 + factor(year), time_varying = NULL)
+mfii <- update(mf, spatiotemporal = "iid", formula. = observed ~ 0 + factor(year), time_varying = NULL, priors = sdmTMBpriors())
+mbii <- update(mb, spatiotemporal = "iid", formula. = observed ~ 0 + factor(year), time_varying = NULL, control = sdmTMBcontrol(), priors = sdmTMBpriors())
 
 pf <- predict(mf, newdata = nd, return_tmb_object = TRUE)
 pb <- predict(mb, newdata = nd, return_tmb_object = TRUE)
@@ -246,14 +292,14 @@ indb <- get_index(pb, bias_correct = TRUE) |> left_join(dy, by = join_by(year))
 indfii <- get_index(pfii, bias_correct = TRUE) |> left_join(dy, by = join_by(year))
 indbii <- get_index(pbii, bias_correct = TRUE) |> left_join(dy, by = join_by(year))
 
-ii <- bind_rows(
+indexes <- bind_rows(
   indf |> mutate(sampling = "full", model = "RW"),
   indb |> mutate(sampling = "biennial", model = "RW"),
   indfii |> mutate(sampling = "full", model = "IID"),
   indbii |> mutate(sampling = "biennial", model = "IID")
 )
 
-ggplot(ii, aes(year, est, ymin = lwr, ymax = upr, colour = biennial_region)) +
+ggplot(indexes, aes(year, est, ymin = lwr, ymax = upr, colour = biennial_region)) +
   geom_pointrange() +
   facet_grid(sampling~model)
 
@@ -290,10 +336,6 @@ chi_square <- function(model_full, model_biennial) {
 chi_square(mfii, mbii)
 chi_square(mf, mb)
 
-# conclusions:
-# - random walk random field is consistent with biennial or full sampling
-# - IID does not (when including random effects)
-
 # missing coverage?
 mean(indbii$lwr > indfii$est | indbii$upr < indfii$est)
 mean(indb$lwr > indfii$est | indb$upr < indfii$est)
@@ -320,19 +362,22 @@ real <- ind_orig |>
   theme(legend.position = "inside", legend.position.inside = c(0.7, 0.7)) + # axis.text.y = element_blank(), axis.ticks.y = element_blank(),
   scale_colour_brewer(palette = "Set2") +
   facet_grid(sampling~model) +
-  coord_cartesian(ylim = c(0, 3)) +
+  coord_cartesian(ylim = c(0, 2.6)) +
   tagger::tag_facets(tag = "panel", tag_prefix = "(", position = "tl", tag_pool = letters) +
   labs(colour = "Biennial sampling region", shape = "Sampling type", x = "Year", y = "Relative biomass") +
   ggtitle("Real data")
 real
 
-simulated <- ii |>
+true_index_scaled <- true_index |>
+  mutate(geo = exp(mean(log(est)))) |>
+  mutate(est = est / geo)
+
+simulated <- indexes |>
   mutate(geo = exp(mean(log(est)))) |>
   mutate(lwr = lwr / geo) |>
   mutate(upr = upr / geo) |>
   mutate(est = est / geo) |>
   mutate(sampling = paste0("Sampling: ", sampling)) |>
-  # mutate(sampling = forcats::fct_rev(sampling)) |>
   mutate(model = paste0("Model: ", model)) |>
   ggplot(aes(year, est, ymin = lwr, ymax = upr, colour = biennial_region)) +
   geom_ribbon(fill = "grey90", colour = NA) +
@@ -343,9 +388,10 @@ simulated <- ii |>
   labs(colour = "Biennial sampling region", shape = "Sampling type", x = "Year", y = "Relative biomass") +
   theme(legend.position = "top") + # , axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
   # coord_cartesian(ylim = c(2e5, 1e6)) +
-  coord_cartesian(ylim = c(0, 3)) +
+  coord_cartesian(ylim = c(0, 2.6)) +
   ggtitle("Simulated data") +
-  tagger::tag_facets(tag = "panel", tag_prefix = "(", position = "tl", tag_pool = letters[-c(1:2)])
+  tagger::tag_facets(tag = "panel", tag_prefix = "(", position = "tl", tag_pool = letters[-c(1:2)]) +
+  geom_line(data = true_index_scaled, mapping = aes(year, est), inherit.aes = FALSE)
   # geom_vline(data = missing_covr, mapping = aes(xintercept = year), lwd = 1.5, alpha = 0.3, colour = "blue")
 simulated
 
@@ -360,9 +406,9 @@ real +
   simulated + theme(legend.position = "none") +
   plot_layout(design = design)
 
-ggsave("figs/self-cross-test-example-lingcod.pdf", width = 7, height = 7)
+# ggsave("figs/self-cross-test-example-lingcod.pdf", width = 7, height = 7)
 
-ii |>
+indexes |>
   mutate(sampling = paste0("Sampling: ", sampling)) |>
   mutate(model = paste0("Model: ", model)) |>
   mutate(type = paste(sampling, model, sep = "; ")) |>
@@ -379,3 +425,82 @@ ii |>
   theme(legend.position = "top", axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
   coord_cartesian(ylim = c(2e5, 1e6))
   # geom_vline(xintercept = missing_covr$year, lwd = 1.5, alpha = 0.3, lty = 1)
+
+# crank down on sequence of rw intercept SDs!? -----------------------------
+
+sds <- c(1e-3, 1e-2, seq(0.1, 1, 0.2), 1e1, 1e2, 1e3)
+sds
+length(sds)
+
+get_ind <- function(s) {
+  mb2 <- sdmTMB(
+    observed ~ 1,
+    data = simb,
+    time = "year",
+    spatial = "on",
+    time_varying = ~ 1,
+    time_varying_type = "rw0",
+    control = sdmTMBcontrol(start = list(ln_tau_V = matrix(log(s), nrow = 1, ncol = 1)), map = list(ln_tau_V = factor(NA))),
+    spatiotemporal = "iid",
+    mesh = meshb,
+    silent = FALSE,
+    family = family
+  )
+  pb2 <- predict(mb2, newdata = nd, return_tmb_object = TRUE)
+  indb2 <- get_index(pb2, bias_correct = TRUE) |> left_join(dy, by = join_by(year))
+  indb2$rw_sd <- s
+  indb2
+}
+
+library(future)
+future::plan(future::multisession)
+out <- furrr::future_map_dfr(sds, get_ind)
+
+out |>
+  mutate(geo = exp(mean(log(est)))) |>
+  mutate(lwr = lwr / geo) |>
+  mutate(upr = upr / geo) |>
+  mutate(est = est / geo) |>
+  mutate(rw_sd = paste0("RW SD: ", rw_sd)) |>
+  ggplot(aes(year, est, ymin = lwr, ymax = upr, colour = biennial_region)) +
+  geom_ribbon(fill = "grey90", colour = NA) +
+  geom_pointrange(position = position_dodge(width = 0.5)) +
+  facet_wrap(~rw_sd) +
+  scale_colour_brewer(palette = "Set2") +
+  geom_line(data = true_index_scaled, mapping = aes(year, est), inherit.aes = FALSE) +
+  coord_cartesian(ylim = c(0, 2.6))
+
+# with a prior!?
+
+
+sigma_V <- seq(0, 1, length.out = 1000)
+p <- gamma_cv(0.2, 0.4)
+plot(sigma_V, dgamma(x, shape = p[1], scale = p[2]), type = "l")
+sdmTMBpriors(sigma_V = gamma_cv(0.2, 0.2))
+mb2 <- sdmTMB(
+  observed ~ 1,
+  data = simb,
+  time = "year",
+  spatial = "on",
+  time_varying = ~ 1,
+  time_varying_type = "rw0",
+  priors = sdmTMBpriors(sigma_V = gamma_cv(0.2, 0.2)),
+  spatiotemporal = "iid",
+  mesh = meshb,
+  silent = FALSE,
+  family = family
+)
+mb2
+pb2 <- predict(mb2, newdata = nd, return_tmb_object = TRUE)
+indb2 <- get_index(pb2, bias_correct = TRUE) |> left_join(dy, by = join_by(year))
+indb2 |>
+  mutate(geo = exp(mean(log(est)))) |>
+  mutate(lwr = lwr / geo) |>
+  mutate(upr = upr / geo) |>
+  mutate(est = est / geo) |>
+  ggplot(aes(year, est, ymin = lwr, ymax = upr, colour = biennial_region)) +
+  geom_ribbon(fill = "grey90", colour = NA) +
+  geom_pointrange(position = position_dodge(width = 0.5)) +
+  scale_colour_brewer(palette = "Set2") +
+  geom_line(data = true_index_scaled, mapping = aes(year, est), inherit.aes = FALSE) +
+  coord_cartesian(ylim = c(0, 2.6))
