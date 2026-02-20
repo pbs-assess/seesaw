@@ -117,25 +117,23 @@ Biennial survey designs can induce seesaw effects in expanded-area abundance ind
 
 \section*{Abstract}
 
-Indices of abundance derived from scientific surveys underpin stock assessment, conservation monitoring, and ecosystem evaluation. In practice, however, survey spatial coverage often changes over time. Some surveys use rotating or biennial designs to efficiently allocate limited sampling effort, others lose or gain large spatial components due to budgetary or logistical constraints, and there is growing interest in combining surveys across jurisdictional boundaries to assess whole-stock status or climate-driven range shifts. Despite these inconsistent issues, analysts often seek an index of abundance that represents the full survey or a stock-domain across multiple surveys. Model-based index standardization over an expanded spatial domain offers a potential solution. However, we show here that in practice this can produce unrealistic interannual oscillations (``seesaw effects''). Using a combination of simulation analyses and applied case studies, we diagnose the mechanisms underlying these oscillations and evaluate potential solutions. We show that the problem arises from models confusing spatial for temporal variation in density. We demonstrate that appropriately penalizing temporal or spatiotemporal variability---via autoregressive correlation structures---can reduce or eliminate seesaw effects. We provide practical guidance for diagnosing these artifacts in real data and for assessing whether model-based solutions are adequately tuned. Our approach enables constructing expanded-area abundance indices that are suitable for stock assessment and related population monitoring applications.
+Indices of abundance derived from scientific surveys underpin stock assessment, conservation monitoring, and ecosystem evaluation. 
+In practice, however, survey spatial coverage often changes over time. 
+Some surveys use rotating or biennial designs to efficiently allocate limited sampling effort, others lose or gain large spatial components due to budgetary or logistical constraints, and there is growing interest in combining surveys across jurisdictional boundaries to assess whole-stock status or climate-driven range shifts. 
+Despite these inconsistent issues, analysts often seek an index of abundance that represents the full survey or a stock-domain across multiple surveys. 
+Model-based index standardization over an expanded spatial domain offers a potential solution. 
+However, we show here that in practice this can produce unrealistic interannual oscillations (``seesaw effects''). 
+Using a combination of simulation analyses and applied case studies, we diagnose the mechanisms underlying these oscillations and evaluate potential solutions. 
+We show that the problem arises from models confusing spatial for temporal variation in density. 
+We demonstrate that appropriately penalizing temporal or spatiotemporal variability---via autoregressive correlation structures---can reduce or eliminate seesaw effects. 
+We provide practical guidance for diagnosing these artifacts in real data and for assessing whether model-based solutions are adequately tuned. 
+Our approach enables constructing expanded-area abundance indices that are suitable for stock assessment and related population monitoring applications.
 
 \section*{Introduction}
 
 \section*{Methods}
 
 \section*{Results}
-
-Main figures
-
-\begin{enumerate}
-    \item Example of biennial survey design plot + Example of index gone wrong with a biennial design
-    \item Simulation design illustration (could drop if needed)
-    \item Multipanel: example applications to simulated data + seesaw metric drivers dot and line plot
-    \item Illustrating the space-time confusion problem
-    \item BC longline + trawl case studies?
-    \item Norway case study?
-    \item Alaska case study??
-\end{enumerate}
 
 % Figures
 % - Spatial setup example (~4 blocks underlying and 4 blocks observed?)
@@ -201,20 +199,58 @@ Main figures
 
 % \clearpage
 
+\section*{Tables}
+
+\begin{enumerate}
+  \item Cases around the world where a biennial design happens or is planned
+\end{enumerate}
+
 \section*{Figures}
 
-\begin{figure}[htb]
-    \centering
-    \includegraphics[width=\textwidth]{figs/spatio-temporal-truth.pdf}
-    \caption{Example of underlying true abundance across 12 years.}
-    \label{fig:truth}
-\end{figure}
+\begin{enumerate}
+    \item Example of biennial survey design plot + Example of index gone wrong with a biennial design
+    \item Simulation design illustration (could drop if needed)
+    \item Multipanel: example applications to simulated data + seesaw metric drivers dot and line plot
+    \item Illustrating the space-time confusion problem
+    \item BC longline + trawl case studies?
+    \item Norway case study?
+    \item Alaska case study??
+\end{enumerate}
+
+\clearpage
 
 \begin{figure}[htb]
     \centering
-    \includegraphics[width=\textwidth]{figs/spatio-temporal-observed.pdf}
-    \caption{Simulated observations example. Note gap in middle and the quadratic north-south abundance gradient. 300 total possible samples per year here. Paper might include a row of this and a row of Fig.~\ref{fig:truth}.}
-    \label{fig:obs}
+    % \includegraphics[width=\textwidth]{figs/sim-illustration.pdf}
+    \caption{An example biennial survey design and index gone wrong.}
+    \label{fig:biennial-example}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figs/sim-example.pdf}
+    \caption{Example (a) true population density and (b) observed density from a simulation design where a north-south gradient in density exists and sampling is conducted in a rotating biennial design.}
+    \label{fig:sim-obs-example}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[htb]
+    \centering
+    % \includegraphics[width=\textwidth]{figs/sim-illustration.pdf}
+    \caption{Example true and estimated abundance estimates across a series of simulation scenarios and with two models: (1) IID random fields and factor years and (2) random walk random fields.}
+    \label{fig:sim-index-examples}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=\textwidth]{figs/sim-illustration.pdf}
+    \caption{Example of space-time estimation confusion with independent fields and a simulated biennial sampling design. (a) The true latent spatial effect with a strong north to south gradient in density. The north (above the horizontal line) is sampled in odd years and the south is sampled in even years. (b) The estimated latent spatial effect for an example year from the random walk random field model. (c) The estimated latent spatial effect and (d) year effects from the IID random field and independent year model. In panel c the spatial field is missing the high abundance pattern in the north. Instead, this model estimates high average abudance in alternating years when the north is sampled (d)}
+    \label{fig:sim-illustration}
 \end{figure}
 
 \begin{figure}[htb]
