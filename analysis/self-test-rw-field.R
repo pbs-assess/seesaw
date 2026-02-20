@@ -74,11 +74,11 @@ fit <- sdmTMB(
   data = d,
   time = "year",
   spatial = "on",
-  time_varying = ~1,
-  time_varying_type = "rw0",
+  # time_varying = ~1,
+  # time_varying_type = "rw0",
   # priors = sdmTMBpriors(sigma_V = gamma_cv(0.2, 0.4)),
   control = sdmTMBcontrol(multiphase = FALSE),
-  spatiotemporal = "ar1",
+  spatiotemporal = "rw",
   extra_time = seq(min(d$year), max(d$year)),
   mesh = mesh,
   silent = FALSE,
@@ -174,39 +174,50 @@ meshs <- make_mesh(locs_combined, c("X", "Y"), mesh = mesh$mesh)
 plot(meshs$mesh)
 meshs$mesh$n
 
-set.seed(123)
+# set.seed(123)
 year_effects <- numeric(length(unique(d$year)))
-(sigma_V <- as.numeric(fit$tmb_obj$report()$sigma_V))
+# (sigma_V <- as.numeric(fit$tmb_obj$report()$sigma_V))
+sigma_V <- 0.2
+set.seed(1)
 year_effects[1] <- unname(coef(fit)) + rnorm(1, 0, sigma_V)
 for (i in 2:length(year_effects)) {
   year_effects[i] <- year_effects[i-1] + rnorm(1, 0, sigma_V)
 }
-plot(year_effects)
+year_effects <- ind$log_est # index mean from random walk field model
+plot(exp(year_effects))
 
 # e <- as.list(fit$sd_report, "Estimate")
 # year_effects <- e$b_rw_t[,,1]
 # plot(exp(year_effects))
+#
+b1_ii <- tidy(fitii)
+b2_ii <- tidy(fitii, "ran_pars")
+b2_ii
 
 simf <- sdmTMB_simulate(
-  ~ 0 + as.factor(year),
+  ~ 0 + factor(year),
   data = locs_combined,
   sigma_O = b2$estimate[b2$term == "sigma_O"],
-  sigma_E = b2$estimate[b2$term == "sigma_E"],
+  # sigma_E = b2_ii$estimate[b2_ii$term == "sigma_E"],
+  sigma_E = 0.5,
   phi = b2$estimate[b2$term == "phi"],
   tweedie_p = b2$estimate[b2$term == "tweedie_p"],
   range = b2$estimate[b2$term == "range"],
   fixed_re = list(omega_s = omega),
-  spatiotemporal = "ar1",
-  rho = b2$estimate[b2$term == "rho"],
+  spatiotemporal = "iid",
+  # rho = b2$estimate[b2$term == "rho"],
   time = "year",
-  seed = 2,
+  seed = 1,
+  # extra_time = 2020,
   family = family,
   mesh = meshs,
   # offset = 1,
+  # offset = rep(mean(d$log_effort), nrow(locs_combined)),
   B = year_effects
 )
 
 simf$type <- locs_combined$type
+simf$log_effort <- mean(d$log_effort)
 simb <- simf
 simb <- filter(simb, type == "real")
 simg <- filter(simf, type == "grid")
@@ -245,9 +256,9 @@ mean(d$observed == 0)
 
 # cross-fit models and simulations and test -----------------------------
 
-sigma_V <- seq(0, 1, length.out = 500L)
-p <- gamma_cv(0.3, 0.6)
-plot(sigma_V, dgamma(sigma_V, shape = p[1], scale = p[2]), type = "l")
+# sigma_V <- seq(0, 1, length.out = 500L)
+# p <- gamma_cv(0.3, 0.6)
+# plot(sigma_V, dgamma(sigma_V, shape = p[1], scale = p[2]), type = "l")
 
 meshs <- make_mesh(simf, c("X", "Y"), mesh = mesh$mesh)
 mf <- sdmTMB(
@@ -255,12 +266,13 @@ mf <- sdmTMB(
   data = simf,
   time = "year",
   spatial = "on",
-  time_varying = ~1,
-  time_varying_type = "rw0",
+  # time_varying = ~1,
+  # time_varying_type = "rw0",
   # priors = sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5)),
-  spatiotemporal = "ar1",
+  spatiotemporal = "rw",
   extra_time = seq(min(simf$year), max(simf$year)),
   mesh = meshs,
+  # offset = "log_effort",
   silent = FALSE,
   family = family
 )
@@ -270,14 +282,15 @@ mb <- sdmTMB(
   data = simb,
   time = "year",
   spatial = "on",
-  time_varying = ~1,
-  time_varying_type = "rw0",
+  # time_varying = ~1,
+  # time_varying_type = "rw0",
   # priors = sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5)),
   # control = sdmTMBcontrol(start = list(ln_tau_V = get_pars(mf)$ln_tau_V), map = list(ln_tau_V = factor(NA))),
-  spatiotemporal = "ar1",
+  spatiotemporal = "rw",
   extra_time = seq(min(simf$year), max(simf$year)),
   mesh = meshb,
   silent = FALSE,
+  # offset = "log_effort",
   family = family
 )
 sanity(mb)
@@ -340,6 +353,8 @@ chi_square <- function(model_full, model_biennial) {
   cat("Random theta p-value =", random, "\n")
 }
 
+mfii
+mbii
 chi_square(mfii, mbii)
 chi_square(mf, mb)
 

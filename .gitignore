@@ -4,3 +4,8 @@
 .Ruserdata
 *.RDS
 text/notes.md
+text/seesaw.fls
+text/seesaw.out
+text/seesaw.synctex.gz
+text/seesaw.xdv
+text/seesaw.fdb_latexmk

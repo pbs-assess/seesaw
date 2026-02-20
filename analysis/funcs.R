@@ -173,6 +173,7 @@ sim_fit_and_index <- function(
     make_plots = FALSE,
     save_plots = FALSE,
     return_fits = FALSE, return_preds = FALSE, return_sim_dat = FALSE,
+    return_obs_dat = FALSE,
     sim_coefs = c(2, 5)) {
   is_even <- function(x) x %% 2 == 0
   if (!is_even(n_year)) cli::cli_abort("Number of years must be even.")
@@ -268,6 +269,9 @@ sim_fit_and_index <- function(
 
   if (return_sim_dat) {
     return(sim_dat)
+  }
+  if (return_obs_dat) {
+    return(d)
   }
   actual <- group_by(sim_dat, year) %>%
     summarise(total = sum(mu)) |>
