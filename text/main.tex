@@ -1,0 +1,292 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.25in]{geometry}
+\usepackage{amsmath, amsfonts, amssymb}
+\usepackage{subfig}
+\usepackage[dvipsnames]{xcolor}
+\definecolor{niceblue}{HTML}{236899}
+\newcommand{\rev}[1]{{\color{niceblue} #1}}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,
+    urlcolor=niceblue,
+    citecolor=niceblue,
+    linkbordercolor = white
+}
+\usepackage{amsbsy}
+\usepackage{epsfig}
+\usepackage{subfig}
+\usepackage{bm}
+\usepackage{xspace}
+\usepackage{color}
+\usepackage{subfloat}
+\usepackage{lineno}
+\usepackage{ragged2e}
+
+\makeatletter
+\let\LN@align\align
+\let\LN@endalign\endalign
+\renewcommand{\align}{\linenomath\LN@align}
+\renewcommand{\endalign}{\LN@endalign\endlinenomath}
+\let\LN@gather\gather
+\let\LN@endgather\endgather
+\renewcommand{\gather}{\linenomath\LN@gather}
+\renewcommand{\endgather}{\LN@endgather\endlinenomath}
+\makeatother
+
+\widowpenalty10000
+\clubpenalty10000
+
+\definecolor{darkgrey}{HTML}{A9A9A9}
+\renewcommand\linenumberfont{\normalfont\bfseries\small\color{darkgrey}}
+\modulolinenumbers[2]
+
+\usepackage{booktabs}
+\usepackage[round]{natbib}
+\bibliographystyle{fishfish}
+\bibpunct{(}{)}{,}{a}{}{,}
+\usepackage{authblk}
+\usepackage{pdflscape}
+
+\usepackage{fontspec}
+
+% \setmainfont{Times New Roman}
+\setmainfont{Libertinus Serif}
+
+% Linux Libertine:
+% \usepackage{textcomp}
+% \usepackage[sb]{libertine}
+% \usepackage[varqu,varl]{inconsolata}% sans serif typewriter
+% \usepackage[libertine,bigdelims,vvarbb]{newtxmath} % bb from STIX
+% \usepackage[cal=boondoxo]{mathalfa} % mathcal
+% \useosf % osf for text, not math
+% \usepackage[supstfm=libertinesups,%
+%   supscaled=1.2,%
+%   raised=-.13em]{superiors}
+\usepackage{setspace}
+
+\newcommand{\sa}[1]{{\color{red}#1}}
+\newcommand{\pe}[1]{{\color{blue}#1}}
+
+% other colours: orange, magenta, sky blue, purple, grey
+
+\newcommand*{\TitleFont}{%
+      \usefont{\encodingdefault}{\rmdefault}{b}{n}%
+      \fontsize{13}{15}%
+      \selectfont}
+
+% \newcommand{\R}[1]{\label{#1}\linelabel{#1}}
+% \newcommand{\lr}[1]{page~\pageref{#1}, line~\lineref{#1}}
+% \newcommand{\lr}[1]{line~\lineref{#1}}
+
+\date{}
+
+\title{
+Correcting seesaw effects in abundance indices arising from biennial and rotating survey designs\\ \smallskip
+Avoiding seesaw effects in model-based abundance indices under changing survey spatial coverage\\ \smallskip
+Diagnosing and correcting seesaw effects in expanded-area, model-based abundance indices\\ \smallskip
+}
+
+% Tentative order (alphabetical after Philina right now) ...
+% Open to going co-first author with Philina!
+\author[1,2*]{Sean C. Anderson}
+\author[0]{keep in touch with Quang (quillback example?), Jillian Dunic, Eric Ward, Brian Stock, Fabian Zimmermann, Paul?, Semra?}
+
+\affil[1]{Pacific Biological Station, Fisheries and Oceans Canada, Nanaimo, BC, Canada}
+\affil[2]{REM \ldots, Simon Fraser University, Burnaby, BC V5A 1S6, Canada}
+\affil[*]{corresponding author: sean.anderson@dfo-mpo.gc.ca}
+
+% \input{values} % R output
+
+% \doublespacing
+\begin{document}
+\begin{spacing}{1.1}
+\maketitle
+
+Target journals: ICES JMS, CJFAS, Fisheries Research, Ecological Applications
+
+\clearpage
+
+% \linenumbers
+
+\section*{25 word summary}
+
+Biennial survey designs can induce seesaw effects in expanded-area abundance indices when models confound spatial and temporal variation. Autoregressive spatiotemporal structures mitigate this.
+
+\section*{Abstract}
+
+Indices of abundance derived from scientific surveys underpin stock assessment, conservation monitoring, and ecosystem evaluation. In practice, however, survey spatial coverage often changes over time. Some surveys use rotating or biennial designs to efficiently allocate limited sampling effort, others lose or gain large spatial components due to budgetary or logistical constraints, and there is growing interest in combining surveys across jurisdictional boundaries to assess whole-stock status or climate-driven range shifts. Despite these inconsistent issues, analysts often seek an index of abundance that represents the full survey or a stock-domain across multiple surveys. Model-based index standardization over an expanded spatial domain offers a potential solution. However, we show here that in practice this can produce unrealistic interannual oscillations (``seesaw effects''). Using a combination of simulation analyses and applied case studies, we diagnose the mechanisms underlying these oscillations and evaluate potential solutions. We show that the problem arises from models confusing spatial for temporal variation in density. We demonstrate that appropriately penalizing temporal or spatiotemporal variability---via autoregressive correlation structures---can reduce or eliminate seesaw effects. We provide practical guidance for diagnosing these artifacts in real data and for assessing whether model-based solutions are adequately tuned. Our approach enables constructing expanded-area abundance indices that are suitable for stock assessment and related population monitoring applications.
+
+\section*{Introduction}
+
+\section*{Methods}
+
+\section*{Results}
+
+Main figures
+
+\begin{enumerate}
+    \item Example of biennial survey design plot + Example of index gone wrong with a biennial design
+    \item Simulation design illustration (could drop if needed)
+    \item Multipanel: example applications to simulated data + seesaw metric drivers dot and line plot
+    \item Illustrating the space-time confusion problem
+    \item BC longline + trawl case studies?
+    \item Norway case study?
+    \item Alaska case study??
+\end{enumerate}
+
+% Figures
+% - Spatial setup example (~4 blocks underlying and 4 blocks observed?)
+% - time series example(s) from one seed?
+% - summary of when bad (dot-line plot)
+% - metrics across a variety of scenarios
+% - maybe a figure digging into an example where it goes wrong - show year effects, show spatial omegas and or fixed effect covariate predictions
+% - a figure of case studies:
+%   - quillback?
+%   - synoptic something?
+%   - shrimp?
+%   - show with IID, show with a penalized form
+
+% What makes it worse:
+% - larger gaps
+% - lower ranges
+% - lower sample sizes
+% - more observation error
+% - strong differential gradient of abundance
+% - never surveying both regions at same time [does a bit of overlap help!?]
+
+% What fixes it:
+% - go survey the whole thing once
+% - penalize the year effects
+%   - RW, AR1, s(), RW field all work
+%   - RW field has a bit of a hit on CI coverage
+%   - a covariate, sometimes; get it right, great; get it wrong, even worse
+
+% Thoughts:
+% - can happen to lesser degree with less extreme examples and be harder to detect
+% - the random walk is a fairly weak penalty; seems to work here but maybe not in all applied situations
+
+% No one-size-fits-all solution, but if you suspect it, these are things that can solve it
+
+% Supplement:
+% -
+
+% \subsection*{The effect of a spatial gap}
+
+% \subsection*{Observation error}
+
+% \subsection*{Does having a year with complete coverage important?}
+
+\section*{Discussion}
+
+
+% Results/Discussion:
+% Random walk random field is the best ones.
+% All models work good with the original data.
+% RW model can "fill in" by effectively averaging the information from the years before and after for N-S data and also N-S Gap data. So it is good at finding structures in the data across years.
+% In a random walk, the next step (or state) is determined by the current step and some random factor. The random walk ensures that changes are not too abrupt, maintaining some continuity.
+% IID models show seesaw. This effect increase with the introduced gap.
+
+\section*{Acknowledgements}
+
+\bibliography{refs}
+
+\end{spacing}
+
+\clearpage
+
+% \section*{Tables}
+
+% \clearpage
+
+\section*{Figures}
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=\textwidth]{figs/spatio-temporal-truth.pdf}
+    \caption{Example of underlying true abundance across 12 years.}
+    \label{fig:truth}
+\end{figure}
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=\textwidth]{figs/spatio-temporal-observed.pdf}
+    \caption{Simulated observations example. Note gap in middle and the quadratic north-south abundance gradient. 300 total possible samples per year here. Paper might include a row of this and a row of Fig.~\ref{fig:truth}.}
+    \label{fig:obs}
+\end{figure}
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=\textwidth]{figs/saw-tooth-example.pdf}
+    \caption{Fitted and true (dashed) index. (log-distributed y). This is old. Make an updated one. See the giant one in Fig.~\ref{fig:metrics-all}.}
+    \label{fig:ts}
+\end{figure}
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=0.6\textwidth]{figs/saw-tooth-bad-iid}
+    \caption{Sawtoothness across scenarios with an independent year-effect model.}
+    \label{fig:bad-iid}
+\end{figure}
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=\textwidth]{figs/saw-tooth-metrics-condensed}
+    \caption{Metrics of fit across all scenarios and models. Point here is that all penalized versions always do OK.}
+    \label{fig:metrics-condensed}
+\end{figure}
+
+
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thetable}{S\arabic{table}}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\setcounter{section}{0}
+\setcounter{subsection}{0}
+\setcounter{subsubsection}{0}
+
+\clearpage
+
+\appendix
+
+\addtocontents{toc}{\protect\setcounter{tocdepth}{0}}
+
+\setcounter{secnumdepth}{0} % Removes section numbers
+
+% \onehalfspacing
+% \linenumbers
+% \resetlinenumber
+% \setcounter{page}{1}
+% \setcounter{equation}{0}
+% \nolinenumbers
+
+% \begin{Center}
+% \section*{Supporting Information}
+% \end{Center}
+
+% \section*{Supporting Methods}
+
+% \subsection*{Geostatistical modelling details}
+
+% \clearpage
+
+\section*{Supporting Figures}
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=\textwidth]{figs/saw-tooth-scenarios}
+    \caption{Example simulations: 1 seed across all scenarios and models}
+    \label{fig:ts-large}
+\end{figure}
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figs/saw-tooth-metrics-all}
+    \caption{Metrics of fit across all scenarios and models.}
+    \label{fig:metrics-all}
+\end{figure}
+
+\end{document}
+
