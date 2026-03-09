@@ -138,7 +138,52 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 # print(g)
-ggsave("figs/saw-tooth-scenarios-may3-4.pdf", width = 15, height = 24)
+ggsave("figs/saw-tooth-scenarios-2026-02-20.pdf", width = 15, height = 24)
+
+# a minimal version for the main text:
+seed_to_plot <- 3
+actual <- select(out_df, label, year, total, seed, sampled_region) |>
+  filter(seed == seed_to_plot) |>
+  distinct()
+actual2 <- mutate(actual, label = gsub("obs", "\\\nobs", label)) |>
+  mutate(label = gsub("black", "\\\nblack", label)) |>
+  mutate(label = gsub("mixture", "\\\nmixture", label)) |>
+  mutate(label = gsub("\\(", "\\\n\\(", label))
+
+labels <- c("Base", "No gap", "Large gap", "High range", "Low range")
+
+.actual2 <- dplyr::filter(actual2, label %in% labels)
+SCALER <- 1e4
+out_df |>
+  filter(seed == seed_to_plot) |>
+  filter(label %in% labels, with_depth == "covariate = FALSE", model %in% c("RW", "IID", "IID RW year")) |>
+  mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
+  mutate(label = gsub("obs", "\\\nobs", label)) |>
+  mutate(label = gsub("black", "\\\nblack", label)) |>
+  mutate(label = gsub("mixture", "\\\nmixture", label)) |>
+  mutate(label = gsub("\\(", "\\\n\\(", label)) |>
+  ggplot(aes(year, est/SCALER, ymin = lwr/SCALER, ymax = upr/SCALER)) +
+  ggsidekick::theme_sleek() +
+  geom_pointrange(aes(colour = sampled_region)) +
+  # geom_line(colour = "grey50") +
+  geom_ribbon(alpha = 0.20, colour = NA) +
+  geom_line(
+    data = .actual2, mapping = aes(year, total/SCALER),
+    inherit.aes = FALSE, lty = 2
+  ) +
+  facet_grid(forcats::fct_inorder(label) ~ type,
+    scales = "free_y"
+  ) +
+  ylab("Abundance estimate") +
+  xlab("Year") +
+  labs(colour = "Sampled region") +
+  scale_colour_manual(values = cols[c(2, 1, 3)]) +
+  scale_y_log10() +
+  coord_cartesian(ylim = c(10, 1000)) +
+  scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
+
+ggsave("figs/example-indices-simulated.pdf", width = 7.5, height = 6.5)
+
 
 # Look at one point in space... -------------------------------------------
 
@@ -232,6 +277,7 @@ g <- temp |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
+g
 ggsave("figs/saw-tooth-metrics-all-May3.pdf", width = 7, height = 25)
 
 # ---------------------------------------------------------------------
@@ -240,7 +286,18 @@ ggsave("figs/saw-tooth-metrics-all-May3.pdf", width = 7, height = 25)
 g <- temp |>
   left_join(saw_tooth_ind) |>
   filter(metric != "mre") |>
+  mutate(metric = as.character(metric)) |> 
+  mutate(metric = replace_values(metric,
+    "seesaw_index" ~ "Seesaw metric",
+    "coverage" ~ "CI coverage",
+    "mean_se" ~ "Mean SE",
+    "rmse" ~ "RMSE"
+  )) |> 
+  mutate(metric = factor(metric,
+    levels = c("Seesaw metric", "RMSE", "Mean SE", "CI coverage")
+  )) |>
   mutate(label = gsub("obs", "\\\nobs", label)) |>
+  filter(!model %in% c("SVC trend, spatial only", "SVC trend, IID fields")) |> 
   # ggplot(aes(x = forcats::fct_reorder(model, med_st_index), y = med, colour = label)) +
   ggplot(aes(x = forcats::fct_reorder(model, med_st_index), y = med, group = label)) +
   geom_point(pch = 21, position = position_dodge(width = 0.2), alpha = 0.8) +
@@ -251,7 +308,7 @@ g <- temp |>
   ylab("Metric value") +
   coord_flip()
 g
-ggsave("figs/saw-tooth-metrics-condensed-dec14.pdf", width = 6.8, height = 3)
+ggsave("figs/saw-tooth-metrics-condensed.pdf", width = 6.8, height = 3)
 
 # ----------------------
 

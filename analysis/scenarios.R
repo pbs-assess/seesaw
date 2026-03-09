@@ -92,10 +92,10 @@ i <- i + 1
 
 # Unequal regions
 
-sc[[i]]$label <- "Unequal regions"
-sc[[i]]$category <- "Region size"
-sc[[i]]$region_cutoff <- 0.25
-i <- i + 1
+# sc[[i]]$label <- "Unequal regions"
+# sc[[i]]$category <- "Region size"
+# sc[[i]]$region_cutoff <- 0.25
+# i <- i + 1
 
 # Range size
 

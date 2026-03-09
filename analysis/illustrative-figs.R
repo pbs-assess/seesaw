@@ -131,7 +131,7 @@ g2 <- ggplot(filter(d, year == 2), aes(X, Y, fill = exp(est))) +
   geom_raster() +
   scale_fill_viridis_c(trans = "log10", limits = LIMS) +
   coord_fixed(expand = FALSE) +
-  ggtitle("IID fields, factor(year)\nEstimated latent spatial effect") +
+  ggtitle("IID fields, factor(year)\nEstimated latent\nspatial effect") +
   guides(fill = "none") +
   theme(axis.text = element_blank(), axis.ticks = element_blank()) +
   geom_hline(yintercept = 0.5)
@@ -143,7 +143,7 @@ g3 <- ggplot(filter(dd, year == 2), aes(X, Y, fill = exp(est))) +
   geom_raster() +
   scale_fill_viridis_c(trans = "log10", limits = LIMS) +
   coord_fixed(expand = FALSE) +
-  ggtitle("RW fields\nEstimated latent spatial effect") +
+  ggtitle("RW fields\nEstimated latent\nspatial effect") +
   guides(fill = "none") +
   theme(axis.text = element_blank(), axis.ticks = element_blank()) +
   geom_hline(yintercept = 0.5)
@@ -205,7 +205,7 @@ g_ts
 ggsave("figs/seesaw-years.png", width = 5, height = 3.5)
 
 patchwork::wrap_plots(g1, g3, g2, g_ts, ncol = 4)
-ggsave("text/figs/sim-illustration.pdf", width = 10, height = 3)
+ggsave("text/figs/sim-illustration.pdf", width = 8, height = 2.7)
 
 blank_theme_elements <- theme(
   panel.grid.major = element_line(colour = "grey90"),
@@ -214,18 +214,20 @@ blank_theme_elements <- theme(
   axis.title = element_blank(), legend.position = "right"
 )
 
-
-LIM <- range(c(sim_dat$eta), log(obs_dat$observed), na.rm = TRUE))
+obs <- log(obs_dat$observed)
+obs <- obs[is.finite(obs)]
+LIM <- range(c(sim_dat$eta, obs, na.rm = TRUE))
 g_sim <-
   ggplot(filter(sim_dat, year %in% c(1:4)), aes(X, Y, fill = eta)) +
   geom_raster() +
   facet_wrap(vars(year), nrow = 1) +
-  scale_fill_viridis_c(limits = c(-5, 8.5)) +
+  scale_fill_viridis_c(limits = c(-4, max(LIM))) +
   ggsidekick::theme_sleek() +
   blank_theme_elements +
   coord_equal(expand = FALSE) +
   theme(panel.grid.major = element_line(colour = "grey90")) +
-  labs(fill = "Log true\ndensity")
+  labs(fill = "Log true\ndensity") +
+  ggtitle("(a) True density")
 g_sim
 
 
@@ -233,12 +235,14 @@ g_obs <-
   ggplot(filter(obs_dat, year %in% c(1:4)), aes(X, Y, colour = log(observed))) +
   geom_point() +
   facet_wrap(vars(year), nrow = 1) +
-  scale_colour_viridis_c() +
+  scale_colour_viridis_c(limits = c(-4, max(LIM))) +
   ggsidekick::theme_sleek() +
   blank_theme_elements +
   coord_equal(expand = FALSE) +
   theme(panel.grid.major = element_line(colour = "grey90")) +
-  labs(colour = "Log observed\ndensity")
+  labs(colour = "Log observed\ndensity") +
+  ggtitle("(b) Observed density")
 g_obs
 
-patchwork::wrap_plots(g_sim, g_obs, nrow = 2)
+patchwork::wrap_plots(g_sim, g_obs, nrow = 2, guides = "collect")
+ggsave("text/figs/sim-example.pdf", width = 7, height = 4.5)

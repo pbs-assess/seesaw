@@ -24,6 +24,7 @@
 \usepackage{subfloat}
 \usepackage{lineno}
 \usepackage{ragged2e}
+\usepackage{array}
 
 \makeatletter
 \let\LN@align\align
@@ -205,19 +206,93 @@ Our approach enables constructing expanded-area abundance indices that are suita
   \item Cases around the world where a biennial design happens or is planned
 \end{enumerate}
 
-\section*{Figures}
-
-\begin{enumerate}
-    \item Example of biennial survey design plot + Example of index gone wrong with a biennial design
-    \item Simulation design illustration (could drop if needed)
-    \item Multipanel: example applications to simulated data + seesaw metric drivers dot and line plot
-    \item Illustrating the space-time confusion problem
-    \item BC longline + trawl case studies?
-    \item Norway case study?
-    \item Alaska case study??
-\end{enumerate}
+\begin{table}[htpb]
+\centering
+\caption{Spatial and spatiotemporal models fit to the survey data for index estimation.}
+\label{tab:model-scenarios}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+Model name    & Year treatment     & Spatiotemporal fields & Spatial fields & Covariate estimated \\ 
+\midrule
+IID (1 | year) & Constant mean     & IID                   & Yes            & ---                 \\
+IID RW year   & Random walk        & IID                   & Yes            & ---                 \\
+IID s(year)   & Penalized smoother & IID                   & Yes            & ---                 \\
+RW            & Constant mean      & Random walk           & Yes            & ---                 \\
+IID covariate & Independent means  & IID                   & Yes            & Yes                 \\
+Spatial only  & Independent means  & ---                   & Yes            & ---                 \\
+IID           & Independent means  & IID                   & Yes            & ---                 \\ 
+\bottomrule
+\end{tabular}
+\end{table}
 
 \clearpage
+
+\begin{table}[htpb]
+\centering
+\caption{Features of the base simulation scenario.}
+\label{tab:base-scenario}
+\begin{tabular}{@{}lr@{}}
+\toprule
+Simulation feature & Value \\
+\midrule
+Spatial coordinate range        & 0, 1 \\
+Observation error family & Tweedie(link = log) \\
+Tweedie dispersion parameter    & 7    \\
+Tweedie power parameter         & 1.6  \\
+North-south gap                 & 0.25 \\
+Quadratic gradient coefficients & 2, 5 \\
+Spatial sampling locations      & Uniform random \\
+Annual sample size              & 200 distributed across full domain  \\
+Total years                     & 12   \\
+Mat\'ern range                  & 0.5  \\
+Spatial SD                      & 1.2  \\
+Spatiotemporal SD               & 0.4  \\
+Year AR1 correlation            & 0.6  \\
+Year AR1 marginal SD            & 0.3  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
+\begin{table}[htpb]
+\centering
+\caption{Features of the simulation scenarios. All scenarios followed the base case (Table~\ref{tab:base-scenario}) unless otherwise described here.}
+\label{tab:sim-scenarios}
+\begin{tabular}{@{}l p{3in}@{}}
+\toprule
+Simulation scenario label & Scenario description                       \\
+\midrule
+Large gap                 & North-south gap: 0.5                       \\
+No gap                    & North-south gap: 0                         \\
+High observation error    & Tweedie dispersion: 14                     \\
+Low observation error     & Tweedie dispersion: 3                      \\
+High year SD              & Internannual year mean SD: 1.0 (log space) \\
+Low range                 & Range: 0.2                                 \\
+High range                & Range: 0.8                                 \\
+Low sample size           & Samples per year: 100 across full domain   \\
+High sample size          & Samples per year: 400 across full domain   \\
+Low sigma O               & Spatial SD: 0.4                            \\
+No covariate              & No abundance gradient                      \\
+Year of overlap (same effort)   & One year surveying both regions, distribute the same sampling effort across both regions     \\
+Year of overlap (double effort) & One year surveying both regions, double the overall sampling effort to main sampling density \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
+\section*{Figures}
+
+% \begin{enumerate}
+%     \item Example of biennial survey design plot + Example of index gone wrong with a biennial design
+%     \item Simulation design illustration (could drop if needed)
+%     \item Multipanel: example applications to simulated data + seesaw metric drivers dot and line plot
+%     \item Illustrating the space-time confusion problem
+%     \item BC longline + trawl case studies?
+%     \item Norway case study?
+%     \item Alaska case study??
+% \end{enumerate}
 
 \begin{figure}[htb]
     \centering
@@ -231,7 +306,7 @@ Our approach enables constructing expanded-area abundance indices that are suita
 \begin{figure}[htb]
     \centering
     \includegraphics[width=0.9\textwidth]{figs/sim-example.pdf}
-    \caption{Example (a) true population density and (b) observed density from a simulation design where a north-south gradient in density exists and sampling is conducted in a rotating biennial design.}
+    \caption{Example (a) true population density and (b) observed density from a simulation design where a north-south gradient in density exists and sampling is conducted in a alternating biennial design. Grey dots in panel b indicate survey sets with zero observed density.}
     \label{fig:sim-obs-example}
 \end{figure}
 
@@ -239,8 +314,8 @@ Our approach enables constructing expanded-area abundance indices that are suita
 
 \begin{figure}[htb]
     \centering
-    % \includegraphics[width=\textwidth]{figs/sim-illustration.pdf}
-    \caption{Example true and estimated abundance estimates across a series of simulation scenarios and with two models: (1) IID random fields and factor years and (2) random walk random fields.}
+    \includegraphics[width=0.8\textwidth]{../figs/example-indices-simulated.pdf}
+    \caption{Illustration of abundance indices estimated from simulated data. Rows illustrate five simulation scenarios: ``Base'' with a moderate spatial range and moderate gap between the north and south regions, ``No gap'' where the gap is removed, ``Large gap'' where the gap is increased, ``Low range'' where the spatial range is shrunk, ``High range'' where the spatial range is increased. Columns illustrate three fitted spatiotemporal models: ``IID'' where the year effects are independent and the random fields are independent and identically distributed (IID) GMRF draws, ``IID RW year'' where the year effects are modelled as random walks and the random fields are IID, and ``RW'' where the random fields are a random walk GMRF and account for all spatiotemporal variation in density. All models also have a static spatial random field. Dashed lines are the true index, coloured dots are the estimated index each year, and the vertical lines and shaded ribbons are the 95\% condifidence intervals. Dots are coloured according to whether the north or south region was sampled in a given year.}
     \label{fig:sim-index-examples}
 \end{figure}
 
@@ -249,31 +324,26 @@ Our approach enables constructing expanded-area abundance indices that are suita
 \begin{figure}[htb]
     \centering
     \includegraphics[width=\textwidth]{figs/sim-illustration.pdf}
-    \caption{Example of space-time estimation confusion with independent fields and a simulated biennial sampling design. (a) The true latent spatial effect with a strong north to south gradient in density. The north (above the horizontal line) is sampled in odd years and the south is sampled in even years. (b) The estimated latent spatial effect for an example year from the random walk random field model. (c) The estimated latent spatial effect and (d) year effects from the IID random field and independent year model. In panel c the spatial field is missing the high abundance pattern in the north. Instead, this model estimates high average abudance in alternating years when the north is sampled (d)}
+    \caption{Example of space-time confusion with independent fields and a simulated biennial sampling design. (a) The true latent spatial effect with a strong north-to-south gradient in density. The north (above the horizontal line) is sampled in odd years and the south is sampled in even years. (b) The estimated latent spatial effect for an example year from the random walk random field model. (c) The estimated latent spatial effect and (d) year effects from the IID random field and independent year model. In panel c, the spatial field is missing the high abundance pattern in the north. Instead, this model estimates high average abudance in alternating years when the north is sampled (d).}
     \label{fig:sim-illustration}
 \end{figure}
 
 \begin{figure}[htb]
     \centering
-    \includegraphics[width=\textwidth]{figs/saw-tooth-example.pdf}
-    \caption{Fitted and true (dashed) index. (log-distributed y). This is old. Make an updated one. See the giant one in Fig.~\ref{fig:metrics-all}.}
-    \label{fig:ts}
-\end{figure}
-
-\begin{figure}[htb]
-    \centering
-    \includegraphics[width=0.6\textwidth]{figs/saw-tooth-bad-iid}
-    \caption{Sawtoothness across scenarios with an independent year-effect model.}
+    \includegraphics[width=0.5\textwidth]{figs/saw-tooth-bad-iid}
+    \caption{Distribution of the ``sawtoothness'' metric across a range of simulation scenarios with an independent year-effect model and IID spatiotemporal random fields. Dots represent medians; line segments represent 0.2 and 0.8 quantiles across TODO simulation iterations. Vertical dashed line illustrates the base-case median value for reference. Scenarios with dots to the right of the vertical line accentuate the biennial pattern in the index; scenarios to the left minimize the pattern.}
     \label{fig:bad-iid}
 \end{figure}
 
+% TODO: maket this relative? i.e. calculate wrt base case?
+% TODO: need a bullet point or table description of the simulation scienarios
+
 \begin{figure}[htb]
     \centering
-    \includegraphics[width=\textwidth]{figs/saw-tooth-metrics-condensed}
-    \caption{Metrics of fit across all scenarios and models. Point here is that all penalized versions always do OK.}
+    \includegraphics[width=0.8\textwidth]{../figs/saw-tooth-metrics-condensed.pdf}
+    \caption{Metrics of estimated index of abundance properties across a series of candidate fitted model configurations. Fitted models are labelled on the x-axis. Models are arranged from by median seesaw metric. RMSE: root mean squared error; mean SE: mean index standard error; CI coverage: confidence interval coverage.}
     \label{fig:metrics-condensed}
 \end{figure}
-
 
 \renewcommand{\thefigure}{S\arabic{figure}}
 \renewcommand{\thetable}{S\arabic{table}}

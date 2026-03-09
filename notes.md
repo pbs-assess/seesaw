@@ -89,13 +89,24 @@ S1. Examples of where this happens worldwide
 ## Figures
 
 1. example bad indexes with example biennial sampling illustration?
-2. simulation sampling design? (first to drop)
-3. subset of example indexes from matrix of options
-4. showing getting the spatial pattern wrong and attributing spatial variance to time
-5a. Forest plot of correlates
-5b. RMSE, Mean SE, coverage forest plot
-6. application to real data (as done by Jillian); pick a couple
+  - mini-map of key years
+  - HBLL, synoptic, Norwegian...
+2. simulation: subset of example indexes from matrix of options with fits
+3. simulation results:
+  - Forest plot of correlates
+  - RMSE, Mean SE, coverage forest plot
+4. showing what happened: showing getting the spatial pattern wrong and attributing spatial variance to time
+5. application to real data (as done by Jillian); pick a couple
+6. what to do?? cross simulation test
 
+TODO:
+- look back at base case... make messy enough? compare to HBLL... expect seesaw effect even if no gap... some, but not zero in no gap scenario
+- 'range' to full survey domain - look at that ratio
+- add in the penalized time-varying intercept model...
+- make prettier figs
+
+1. 
+2. simulation sampling design? (first to drop) - supplement
 S1. full matrix of simulation examples (~3 replicates?)
 S2. extra examples on real data
 
