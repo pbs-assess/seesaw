@@ -425,10 +425,11 @@ sim_fit_and_index <- function(
     fit <- tryCatch(do.call(sdmTMB, fit_args), error = function(e) NA)
     check_sanity(fit)
   }
-  fits <- purrr::map(model_specs, fit_one)
-  names(fits) <- purrr::map_chr(model_specs, "name")
+  model_names <- purrr::map_chr(model_specs, "name")
 
   if (return_fits) {
+    fits <- purrr::map(model_specs, fit_one)
+    names(fits) <- model_names
     return(fits)
   }
 
@@ -441,25 +442,42 @@ sim_fit_and_index <- function(
 
   nd <- left_join(nd, lu, by = join_by(year))
 
-  preds <- purrr::map(fits, function(.x) {
-    if (inherits(.x, "sdmTMB")) {
-      out <- predict(.x, newdata = nd, return_tmb_object = TRUE)
+  predict_one <- function(fit) {
+    if (inherits(fit, "sdmTMB")) {
+      predict(fit, newdata = nd, return_tmb_object = TRUE)
     } else {
-      out <- NA
+      NA
     }
-    out
-  })
+  }
+  index_one <- function(pred) {
+    if (length(pred) > 1) {
+      get_index(pred, bias_correct = TRUE)
+    }
+  }
+
   if (return_preds) {
+    preds <- setNames(vector("list", length(model_specs)), model_names)
+    for (i in seq_along(model_specs)) {
+      fit <- fit_one(model_specs[[i]])
+      preds[[i]] <- predict_one(fit)
+      rm(fit)
+      if (i %% 4L == 0L) gc(FALSE)
+    }
     return(preds)
   }
 
-  indexes <- purrr::map(preds, function(.x) {
-    if (length(.x) > 1) {
-      get_index(.x, bias_correct = TRUE)
+  # Default path: stream fit -> predict -> index per model to reduce memory.
+  indexes <- list()
+  for (i in seq_along(model_specs)) {
+    fit <- fit_one(model_specs[[i]])
+    pred <- predict_one(fit)
+    idx <- index_one(pred)
+    if (!is.null(idx)) {
+      indexes[[model_names[[i]]]] <- idx
     }
-  })
-
-  indexes <- indexes[!sapply(indexes, is.null)]
+    rm(fit, pred, idx)
+    if (i %% 4L == 0L) gc(FALSE)
+  }
 
   indexes_df <- dplyr::bind_rows(indexes, .id = "model") |>
     mutate(with_depth = paste0("covariate = ", grepl("covariate", model))) |>
