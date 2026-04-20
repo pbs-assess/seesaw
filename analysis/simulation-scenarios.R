@@ -20,7 +20,7 @@ base <- list(
 )
 
 # N here should match number of scenarios below:
-sc <- purrr::map(seq_len(18L), ~base)
+sc <- purrr::map(seq_len(19L), ~base)
 
 i <- 1
 
@@ -79,17 +79,28 @@ i <- i + 1
 # Year of overlap
 
 sc[[i]]$label <- "Year of overlap (same effort)"
-sc[[i]]$category <- "Year overlap"
+sc[[i]]$category <- "Coverage"
 sc[[i]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
 i <- i + 1
 
 # Year of overlap (and double effort overall)
 
 sc[[i]]$label <- "Year of overlap (double effort)"
-sc[[i]]$category <- "Year overlap"
+sc[[i]]$category <- "Coverage"
 sc[[i]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
 sc[[i]]$obs_sampled_size <- setNames(rep(200L, n_year), seq_len(n_year))
 sc[[i]]$obs_sampled_size[as.character(n_year)] <- 400L
+i <- i + 1
+
+# Full domain coverage every year (minus gap), fixed effort
+
+sc[[i]]$label <- "Both regions every year (same effort)"
+sc[[i]]$category <- "Coverage"
+sc[[i]]$obs_yrs <- list(
+  north_yrs = seq_len(n_year),
+  south_yrs = seq_len(n_year)
+)
+sc[[i]]$obs_sampled_size <- 200L
 i <- i + 1
 
 # Unequal regions

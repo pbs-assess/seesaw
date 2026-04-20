@@ -378,216 +378,56 @@ sim_fit_and_index <- function(
   )
   # priors <- sdmTMBpriors()
 
-  fits <- list()
-  nms <- c()
-  i <- 1
   ctl <- sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)
 
   check_sanity <- function(x) {
+    if (!inherits(x, "sdmTMB")) {
+      return(NA)
+    }
     if (!all(unlist(sanity(x, gradient_thresh = 0.01)))) {
       return(NA)
     } else {
       return(x)
     }
   }
-  try_sdmTMB <- function(...) {
-    tryCatch(sdmTMB(...), error = function(e) NA)
-  }
-
-  cli::cli_inform("Fitting st = 'rw'")
-  fits[[i]] <- try_sdmTMB(
-    observed ~ 1,
-    family = tweedie(),
-    data = d, time = "year", spatiotemporal = "rw", spatial = "on",
-    silent = TRUE, mesh = mesh,
-    priors = priors,
-    control = ctl
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  nms <- c(nms, "RW")
-  i <- i + 1
-
-  cli::cli_inform("Fitting st = 'rw' with time-varying RW")
-  fits[[i]] <- try_sdmTMB(
-    observed ~ 0,
-    time_varying = ~1,
-    time_varying_type = "rw",
-    family = tweedie(),
-    data = d, time = "year", spatiotemporal = "rw", spatial = "on",
-    silent = TRUE, mesh = mesh,
-    priors = priors,
-    control = ctl
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  nms <- c(nms, "RW, time-varying RW")
-  i <- i + 1
-
-  cli::cli_inform("Fitting st = 'rw' with 0.1 time-varying RW")
-  # .dim <- if (isTRUE(family$delta)) 2 else 1
-  .dim <- 1L
-  fits[[i]] <- try_sdmTMB(
-    observed ~ 0,
-    time_varying = ~1,
-    time_varying_type = "rw",
-    family = tweedie(),
-    data = d, time = "year", spatiotemporal = "rw", spatial = "on",
-    silent = TRUE, mesh = mesh,
-    priors = priors,
-    control = sdmTMBcontrol(
-      start = list(ln_tau_V = matrix(log(0.1), nrow = 1, ncol = .dim)),
-      map = list(ln_tau_V = rep(factor(NA), .dim))
-    )
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  nms <- c(nms, "RW, 0.1 time-varying RW")
-  i <- i + 1
-
   lu <- data.frame(year = sort(unique(d$year)), year_pairs = as.factor(rep(seq(1, max(d$year)), each = 2)[seq_along(unique(d$year))]))
-  d <- left_join(d, lu, by = join_by(year))
+  d_pairs <- left_join(d, lu, by = join_by(year))
 
-  cli::cli_inform("Fitting st = 'rw' with paired year factors")
-  fits[[i]] <- try_sdmTMB(
-    observed ~ 0 + as.factor(year_pairs),
-    family = tweedie(),
-    data = d, time = "year", spatiotemporal = "rw", spatial = "on",
-    silent = TRUE, mesh = mesh,
-    priors = priors,
-    control = ctl
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  nms <- c(nms, "RW, as.factor(year_pairs)")
-  i <- i + 1
+  source(here::here("analysis", "estimation-scenarios.R"))
+  model_specs <- build_model_specs()
 
-  cli::cli_inform("Fitting st IID covariate")
-  fits[[i]] <- try_sdmTMB(
-    observed ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2),
-    family = tweedie(),
-    data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-    silent = TRUE, mesh = mesh,
-    priors = priors,
-    control = ctl
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  nms <- c(nms, "IID covariate")
-  i <- i + 1
+  data_lookup <- list(base = d, pairs = d_pairs)
+  fit_one <- function(spec) {
+    cli::cli_inform("Fitting {.val {spec$name}}")
+    control_this <- if (is.null(spec$control)) ctl else spec$control
+    data_key <- if (is.null(spec$data_key)) "base" else spec$data_key
+    if (!data_key %in% names(data_lookup)) {
+      cli::cli_abort(c(
+        "Unknown data key in model spec {.val {spec$name}}.",
+        "x" = "Expected one of: {paste(names(data_lookup), collapse = ', ')}.",
+        "x" = "Got: {.val {data_key}}."
+      ))
+    }
 
-  cli::cli_inform("Fitting st IID s(year)")
-  fits[[i]] <- try_sdmTMB(
-    observed ~ s(year),
-    family = tweedie(),
-    data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-    silent = TRUE, mesh = mesh,
-    priors = priors,
-    control = ctl
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  nms <- c(nms, "IID s(year)")
-  i <- i + 1
+    fit_args <- c(
+      spec$fit_args,
+      list(
+        family = tweedie(),
+        data = data_lookup[[data_key]],
+        time = "year",
+        spatial = "on",
+        silent = TRUE,
+        mesh = mesh,
+        priors = priors,
+        control = control_this
+      )
+    )
+    fit <- tryCatch(do.call(sdmTMB, fit_args), error = function(e) NA)
+    check_sanity(fit)
+  }
+  fits <- purrr::map(model_specs, fit_one)
+  names(fits) <- purrr::map_chr(model_specs, "name")
 
-  cli::cli_inform("Fitting st IID no covariate as.factor year")
-  fits[[i]] <- try_sdmTMB(
-    observed ~ 0 + as.factor(year),
-    family = tweedie(),
-    data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-    mesh = mesh,
-    priors = priors,
-    control = ctl
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  i <- i + 1
-  nms <- c(nms, "IID")
-
-  cli::cli_inform("Fitting st time_varying RW")
-  fits[[i]] <- try_sdmTMB(
-    observed ~ 0,
-    family = tweedie(),
-    time_varying = ~1,
-    data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-    mesh = mesh,
-    priors = priors,
-    control = ctl
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  i <- i + 1
-  nms <- c(nms, "IID RW year")
-
-  cli::cli_inform("Fitting st (1|year)")
-  fits[[i]] <- try_sdmTMB(
-    observed ~ 1 + (1 | fyear),
-    family = tweedie(),
-    data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-    mesh = mesh,
-    priors = priors,
-    control = ctl
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  i <- i + 1
-  nms <- c(nms, "IID (1|year)")
-
-  # cli::cli_inform("Fitting st time_varying AR1")
-  # fits[[i]] <- try_sdmTMB(
-  #   observed ~ 0,
-  #   family = tweedie(),
-  #   time_varying = ~1, time_varying_type = "ar1",
-  #   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-  #   mesh = mesh,
-  #   priors = priors,
-  #   control = ctl
-  # )
-  # fits[[i]] <- check_sanity(fits[[i]])
-  # i <- i + 1
-  # nms <- c(nms, "IID AR1 year")
-
-  cli::cli_inform("Fitting spatial only")
-  fits[[i]] <- try_sdmTMB(
-    observed ~ 0 + as.factor(year),
-    family = tweedie(),
-    data = d, time = "year", spatiotemporal = "off", spatial = "on",
-    mesh = mesh,
-    priors = priors,
-    control = ctl
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  i <- i + 1
-  nms <- c(nms, "Spatial only")
-
-  # cli::cli_inform("Fitting SVC trend model")
-  #
-  # mean_year <- mean(d$year)
-  # d$year_cent <- d$year - mean_year
-  # fits[[i]] <- try_sdmTMB(
-  #   observed ~ 0 + as.factor(year),
-  #   family = tweedie(),
-  #   data = d, time = "year",
-  #   spatiotemporal = "iid",
-  #   spatial = "on",
-  #   spatial_varying = ~ 0 + year_cent,
-  #   mesh = mesh,
-  #   priors = priors,
-  #   control = ctl
-  # )
-  # fits[[i]] <- check_sanity(fits[[i]])
-  # i <- i + 1
-  # nms <- c(nms, "SVC trend, IID fields")
-
-  # cli::cli_inform("Fitting SVC trend model without ST fields")
-  #
-  # fits[[i]] <- try_sdmTMB(
-  #   observed ~ 0 + as.factor(year),
-  #   family = tweedie(),
-  #   data = d, time = "year",
-  #   spatiotemporal = "off",
-  #   spatial = "on",
-  #   spatial_varying = ~ 0 + year_cent,
-  #   mesh = mesh,
-  #   priors = priors,
-  #   control = ctl
-  # )
-  # fits[[i]] <- check_sanity(fits[[i]])
-  # i <- i + 1
-  # nms <- c(nms, "SVC trend, spatial only")
-
-  names(fits) <- nms
   if (return_fits) {
     return(fits)
   }

@@ -4,7 +4,7 @@ theme_set(ggsidekick::theme_sleek())
 library(dplyr)
 source("analysis/funcs.R")
 dir.create("figs", showWarnings = FALSE)
-source(here::here("analysis/scenarios.R"))
+source(here::here("analysis/simulation-scenarios.R"))
 if (any(grepl("empty", purrr::map_chr(sc, "label")))) stop("Too many slots")
 labels <- unname(purrr::map_chr(sc, "label"))
 names(sc) <- labels
