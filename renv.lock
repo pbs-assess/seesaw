@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "4.5.2",
+    "Version": "4.5.3",
     "Repositories": [
       {
         "Name": "CRAN",
@@ -190,9 +190,9 @@
     },
     "PBSdata": {
       "Package": "PBSdata",
-      "Version": "1.27.8",
+      "Version": "1.28.0",
       "Source": "GitHub",
-      "Date": "2025-04-29",
+      "Date": "2025-06-04",
       "Title": "Data, Boundaries, and Key Codes",
       "Authors@R": "c( person(\"Rowan\", \"Haigh\", role = c(\"aut\", \"cre\"), email = \"rowan.haigh@dfo-mpo.gc.ca\"), person(c(\"Jon\", \"T.\"), \"Schnute\", role = \"ctb\", email = \"schnutej@shaw.ca\"), person(\"Norm\", \"Olsen\", role = \"ctb\", email = \"norm.olsen@dfo-mpo.gc.ca\"), person(\"Lisa\", \"Lacko\", role = \"ctb\", email = \"lisa.lacko@dfo-mpo.gc.ca\"), person(c(\"Andrew\", \"M.\"), \"Edwards\", role = \"ctb\", email = \"andrew.edwards@dfo-mpo.gc.ca\"), person(c(\"Paul\", \"J.\"), \"Starr\", role = \"ctb\", email = \"paul@starrfish.net\") )",
       "Author": "Rowan Haigh [aut, cre], Jon T. Schnute [ctb], Norm Olsen [ctb], Lisa Lacko [ctb],  Andrew M. Edwards [ctb], Paul J. Starr [ctb]",
@@ -209,12 +209,11 @@
       "URL": "https://github.com/pbs-software/pbs-data, https://github.com/pbs-software/pbs-tools, https://github.com/pbs-software/pbs-mapx",
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
-      "RemoteRepo": "pbs-data",
       "RemoteUsername": "pbs-software",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "f2e179e3f10a089b7f7a293d44e8e343cbd58f20",
+      "RemoteRepo": "pbs-data",
       "RemoteSubdir": "PBSdata",
-      "NeedsCompilation": "no"
+      "RemoteRef": "master",
+      "RemoteSha": "d2c0b9fbcacc43559ac302096061c6eb9207e66d"
     },
     "PBSmapping": {
       "Package": "PBSmapping",
@@ -2407,7 +2406,7 @@
     "gfplot": {
       "Package": "gfplot",
       "Version": "0.2.1",
-      "Source": "unknown",
+      "Source": "GitHub",
       "Title": "Data Extraction and Plotting for DFO PBS Groundfish Stocks",
       "Authors@R": "c(person(given = c(\"Sean\", \"C.\"), family = \"Anderson\", role = c(\"aut\", \"cre\"), email = \"sean.anderson@dfo-mpo.gc.ca\"), person(given = c(\"Elise\", \"A.\"), family = \"Keppel\", role = \"aut\"), person(given = c(\"Andrew\", \"M.\"), family = \"Edwards\", role = \"aut\"), person(given = \"Chris\", family = \"Grandin\", role = \"aut\"))",
       "Description": "Facilitates groundfish data extraction at the Canadian Department of Fisheries and Oceans (DFO) Pacific Biological Station (PBS), data tidying, model fitting, and plotting.",
@@ -2415,7 +2414,7 @@
       "URL": "https://github.com/pbs-assess/gfplot",
       "BugReports": "https://github.com/pbs-assess/gfplot/issues",
       "Depends": [
-        "R (>= 4.1.0)"
+        "R (>= 3.4.0)"
       ],
       "Imports": [
         "assertthat",
@@ -2456,9 +2455,15 @@
       "LazyData": "true",
       "Roxygen": "list(markdown = TRUE)",
       "RoxygenNote": "7.3.2",
-      "NeedsCompilation": "yes",
       "Author": "Sean C. Anderson [aut, cre], Elise A. Keppel [aut], Andrew M. Edwards [aut], Chris Grandin [aut]",
-      "Maintainer": "Sean C. Anderson <sean.anderson@dfo-mpo.gc.ca>"
+      "Maintainer": "Sean C. Anderson <sean.anderson@dfo-mpo.gc.ca>",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteUsername": "pbs-assess",
+      "RemoteRepo": "gfplot",
+      "RemoteRef": "master",
+      "RemoteSha": "67cb3b02610499d6229ec1e166c06e161f91f538",
+      "Remotes": "github::pbs-software/pbs-data/PBSdata, github::pbs-assess/sdmTMB, github::pbs-assess/rosettafish"
     },
     "ggplot2": {
       "Package": "ggplot2",
@@ -2585,7 +2590,7 @@
     "ggsidekick": {
       "Package": "ggsidekick",
       "Version": "0.0.3",
-      "Source": "unknown",
+      "Source": "GitHub",
       "Type": "Package",
       "Title": "Helper Functions for ggplot2",
       "Author": "Sean C. Anderson",
@@ -2593,6 +2598,7 @@
       "Description": "Helper functions for ggplot2.",
       "License": "GPL-3",
       "Encoding": "UTF-8",
+      "LazyData": "true",
       "Roxygen": "list(markdown = TRUE)",
       "Imports": [
         "ggplot2 (>= 2.2.0)",
@@ -2603,7 +2609,12 @@
         "tagger"
       ],
       "RoxygenNote": "7.3.2.9000",
-      "NeedsCompilation": "no"
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteUsername": "seananderson",
+      "RemoteRepo": "ggsidekick",
+      "RemoteRef": "master",
+      "RemoteSha": "dcfe34590e8a37b3dbefd2016b3f237b776147e7"
     },
     "glmmTMB": {
       "Package": "glmmTMB",
@@ -5132,7 +5143,7 @@
     "rosettafish": {
       "Package": "rosettafish",
       "Version": "0.0.0.9000",
-      "Source": "unknown",
+      "Source": "GitHub",
       "Title": "Automatic Translation of Fish and Fisheries Terms",
       "Authors@R": "c(person(given = c(\"Sean\", \"C.\"), family = \"Anderson\", role = c(\"aut\", \"cre\"), email = \"sean.anderson@dfo-mpo.gc.ca\", comment = c(ORCID = \"0000-0001-9563-1937\")), person(given = \"Chris\", family = \"Grandin\", role = \"aut\"), person(given = \"Andrew\", family = \"Edwards\", role = \"aut\"), person(given = \"Jaclyn\", family = \"Cleary\", role = \"aut\"), person(given = \"Mathieu\", family = \"Desgagnes\", role = \"aut\"), person(given = \"Matt\", family = \"Grinnell\", role = \"aut\"), person(given = \"Elise\", family = \"Keppel\", role = \"aut\"), person(given = \"Ann\", family = \"Mariscak\", role = \"ctb\"), person(given = \"Paul\", family = \"Regular\", role = \"ctb\"), person(given = \"Daniel\", family = \"Ricard\", role = \"ctb\"))",
       "Description": "'rosettafish' translates fish- and fisheries-related words or short phrases between languages (mainly French to English or English to French, presently). The package has a built-in .csv file of English-French translations of common technical fisheries terms that are often incorrectly translated by generic automatic translators. Users can add to this or use their own file, and are encouraged to add to the ever-expanding list of common terms using the instructions in the README.md file.",
@@ -5157,7 +5168,13 @@
       "Roxygen": "list(markdown = TRUE)",
       "RoxygenNote": "7.3.2",
       "Author": "Sean C. Anderson [aut, cre] (ORCID: <https://orcid.org/0000-0001-9563-1937>), Chris Grandin [aut], Andrew Edwards [aut], Jaclyn Cleary [aut], Mathieu Desgagnes [aut], Matt Grinnell [aut], Elise Keppel [aut], Ann Mariscak [ctb], Paul Regular [ctb], Daniel Ricard [ctb]",
-      "Maintainer": "Sean C. Anderson <sean.anderson@dfo-mpo.gc.ca>"
+      "Maintainer": "Sean C. Anderson <sean.anderson@dfo-mpo.gc.ca>",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteUsername": "pbs-assess",
+      "RemoteRepo": "rosettafish",
+      "RemoteRef": "master",
+      "RemoteSha": "0e4044d7b5ce2044d9a225b45268079aef5f7098"
     },
     "rprojroot": {
       "Package": "rprojroot",
@@ -5432,8 +5449,8 @@
     },
     "sdmTMB": {
       "Package": "sdmTMB",
-      "Version": "1.0.0.9002",
-      "Source": "unknown",
+      "Version": "1.0.0",
+      "Source": "Repository",
       "Type": "Package",
       "Title": "Spatial and Spatiotemporal SPDE-Based GLMMs with 'TMB'",
       "Authors@R": "c( person(c(\"Sean\", \"C.\"), \"Anderson\", , \"sean@seananderson.ca\", role = c(\"aut\", \"cre\"), comment = c(ORCID = \"0000-0001-9563-1937\")), person(c(\"Eric\", \"J.\"), \"Ward\", role = \"aut\", comment = c(ORCID = \"0000-0002-4359-0296\")), person(c(\"Philina\", \"A.\"), \"English\", role = \"aut\", comment = c(ORCID = \"0000-0003-2992-6782\")), person(c(\"Lewis\", \"A.\", \"K.\"), \"Barnett\", role = \"aut\", comment = c(ORCID = \"0000-0002-9381-8375\")), person(c(\"James\", \"T.\"), \"Thorson\", role = c(\"aut\", \"cph\"), comment = c(ORCID = \"0000-0001-7415-1010\", \"VAST author\")), person(\"Joe\", \"Watson\", role = \"ctb\", comment = \"Censored Poisson\"), person(\"Julia\", \"Indivero\", role = \"ctb\", comment = c(ORCID = \"0000-0001-5310-9542\", \"Vignette writing\")), person(c(\"Jillian\", \"C.\"), \"Dunic\", role = \"ctb\", comment = c(ORCID = \"0000-0002-0729-3083\")), person(\"Joseph\", \"Barss\", role = \"ctb\"), person(c(\"Cole\", \"C.\"), \"Monnahan\", role = c(\"ctb\", \"cph\"), comment = c(ORCID = \"0000-0003-0871-6700\", \"VAST contributor\")), person(\"Mollie\", \"Brooks\", role = c(\"ctb\", \"cph\"), comment = c(ORCID = \"0000-0001-6963-8326\", \"glmmTMB author\")), person(\"Ben\", \"Bolker\", role = c(\"ctb\", \"cph\"), comment = c(ORCID = \"0000-0002-2127-0443\", \"glmmTMB author\")), person(\"Kasper\", \"Kristensen\", role = c(\"ctb\", \"cph\"), comment = \"TMB/glmmTMB author\"), person(\"Martin\", \"Maechler\", role = c(\"ctb\", \"cph\"), comment = c(ORCID = \"0000-0002-8685-9910\", \"glmmTMB author\")), person(\"Arni\", \"Magnusson\", role = c(\"ctb\", \"cph\"), comment = c(ORCID = \"0000-0003-2769-6741\", \"glmmTMB author\")), person(c(\"Hans\", \"J.\"), \"Skaug\", role = c(\"ctb\", \"cph\"), comment = \"glmmTMB author, SPDE barrier\"), person(\"Anders\", \"Nielsen\", role = c(\"ctb\", \"cph\"), comment = c(ORCID = \"0000-0001-9683-9262\", \"glmmTMB author\")), person(\"Casper\", \"Berg\", role = c(\"ctb\", \"cph\"), comment = c(ORCID = \"0000-0002-3812-5269\", \"glmmTMB author\")), person(\"Koen\", \"van Bentham\", role = c(\"ctb\", \"cph\"), comment = \"glmmTMB author\"), person(c(\"Olav\", \"Nikolai\"), \"Breivik\", role = c(\"ctb\", \"cph\"), comment = \"SPDE barrier\"), person(\"Simon\", \"Wood\", role = c(\"ctb\", \"cph\"), comment = \"mgcv: smoother prediction\"), person(\"Paul-Christian\", \"Bürkner\", role = c(\"ctb\", \"cph\"), comment = \"brms: smoother matrix parsing\"), person(paste(\"His Majesty the King in Right of Canada, as represented by\", \"the Minister of the Department of Fisheries and Oceans\"), role = \"cph\") )",
@@ -5497,11 +5514,12 @@
       "Config/testthat/parallel": "true",
       "Encoding": "UTF-8",
       "LazyData": "true",
-      "Roxygen": "list(markdown = TRUE)",
       "RoxygenNote": "7.3.3",
       "SystemRequirements": "GNU make",
+      "NeedsCompilation": "yes",
       "Author": "Sean C. Anderson [aut, cre] (ORCID: <https://orcid.org/0000-0001-9563-1937>), Eric J. Ward [aut] (ORCID: <https://orcid.org/0000-0002-4359-0296>), Philina A. English [aut] (ORCID: <https://orcid.org/0000-0003-2992-6782>), Lewis A. K. Barnett [aut] (ORCID: <https://orcid.org/0000-0002-9381-8375>), James T. Thorson [aut, cph] (ORCID: <https://orcid.org/0000-0001-7415-1010>, VAST author), Joe Watson [ctb] (Censored Poisson), Julia Indivero [ctb] (ORCID: <https://orcid.org/0000-0001-5310-9542>, Vignette writing), Jillian C. Dunic [ctb] (ORCID: <https://orcid.org/0000-0002-0729-3083>), Joseph Barss [ctb], Cole C. Monnahan [ctb, cph] (ORCID: <https://orcid.org/0000-0003-0871-6700>, VAST contributor), Mollie Brooks [ctb, cph] (ORCID: <https://orcid.org/0000-0001-6963-8326>, glmmTMB author), Ben Bolker [ctb, cph] (ORCID: <https://orcid.org/0000-0002-2127-0443>, glmmTMB author), Kasper Kristensen [ctb, cph] (TMB/glmmTMB author), Martin Maechler [ctb, cph] (ORCID: <https://orcid.org/0000-0002-8685-9910>, glmmTMB author), Arni Magnusson [ctb, cph] (ORCID: <https://orcid.org/0000-0003-2769-6741>, glmmTMB author), Hans J. Skaug [ctb, cph] (glmmTMB author, SPDE barrier), Anders Nielsen [ctb, cph] (ORCID: <https://orcid.org/0000-0001-9683-9262>, glmmTMB author), Casper Berg [ctb, cph] (ORCID: <https://orcid.org/0000-0002-3812-5269>, glmmTMB author), Koen van Bentham [ctb, cph] (glmmTMB author), Olav Nikolai Breivik [ctb, cph] (SPDE barrier), Simon Wood [ctb, cph] (mgcv: smoother prediction), Paul-Christian Bürkner [ctb, cph] (brms: smoother matrix parsing), His Majesty the King in Right of Canada, as represented by the Minister of the Department of Fisheries and Oceans [cph]",
-      "Maintainer": "Sean C. Anderson <sean@seananderson.ca>"
+      "Maintainer": "Sean C. Anderson <sean@seananderson.ca>",
+      "Repository": "CRAN"
     },
     "selectr": {
       "Package": "selectr",
