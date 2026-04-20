@@ -1,16 +1,27 @@
 sim_ar1_heavy <- function(
     n, marginal_sd, rho, mu = 0,
     heavy_sd_mult = 1, heavy_sd_frac = 0, s = 42) {
-  sigma <- sqrt(1 - rho^2)
   set.seed(s)
+
+  # Exact non-heavy path to match stats::arima.sim() behavior.
+  if (heavy_sd_frac == 0) {
+    x <- stats::arima.sim(
+      model = list(ar = rho),
+      n = n,
+      sd = sqrt(1 - rho^2)
+    )
+    return(as.numeric(x) * marginal_sd + mu)
+  }
+
+  sigma <- sqrt(1 - rho^2)
   devs <- rnorm(n) * marginal_sd
   set.seed(s)
   devs_heavy <- rnorm(n) * marginal_sd * heavy_sd_mult
   hd <- rbinom(n, size = 1, prob = heavy_sd_frac)
   this_dev <- if (hd[1] == 0) devs[1] else devs_heavy[1]
-  x0 <- this_dev * marginal_sd
+  x0 <- this_dev
   B <- numeric(n)
-  B[1] <- rho * x0 + sigma * devs[1]
+  B[1] <- rho * x0 + sigma * this_dev
   for (i in seq(2, length(B))) {
     this_dev <- if (hd[i] == 0) devs[i] else devs_heavy[i]
     B[i] <- rho * B[i - 1] + sigma * this_dev
@@ -19,13 +30,25 @@ sim_ar1_heavy <- function(
 }
 
 sim <- function(
-    predictor_grid, mesh, phi = 8, seed = 123,
-    region_cutoff = 0.5, rho = 0, sigma_E = 0.4, range = 0.8, tweedie_p = 1.6,
-    sigma_O = 1.6, coefs = c(2.2, 3.8), year_mean = 1, north_effect = 0,
-    year_arima.sim = list(ar = 0.8), year_marginal_sd = 0.2,
-    svc_trend = 0,
-    heavy_sd_mult = 1,
-    heavy_sd_frac = 0) {
+  predictor_grid, 
+  mesh, 
+  phi = 8,
+  seed = 123,
+  region_cutoff = 0.5,
+  rho = 0,
+  sigma_E = 0.4,
+  range = 0.8,
+  tweedie_p = 1.6,
+  sigma_O = 1.6,
+  coefs = c(2.2, 3.8),
+  year_mean = 1,
+  north_effect = 0,
+  year_arima.sim = list(ar = 0.8),
+  year_marginal_sd = 0.2,
+  svc_trend = 0,
+  heavy_sd_mult = 1,
+  heavy_sd_frac = 0) {
+
   predictor_grid$region <- NA
   predictor_grid$region[predictor_grid$Y < region_cutoff] <- "south"
   predictor_grid$region[predictor_grid$Y >= region_cutoff] <- "north"
@@ -86,6 +109,13 @@ sim <- function(
   }
 
   set.seed(seed * 1029)
+
+  # x <- predictor_grid$depth_cov
+  # plot(x, x*2 + (x^2)*5)
+  #
+  # x <- predictor_grid$depth_cov
+  # lines(x, x*7, lty = 2)
+
   sim_dat <- sdmTMB_simulate(
     formula = formula,
     data = predictor_grid,
@@ -106,6 +136,59 @@ sim <- function(
   list(sim_dat = sim_dat, predictor_dat = predictor_grid, year_effects = yrs, coefs = coefs, B = B)
 }
 
+resolve_sample_n <- function(sample_n, years) {
+  years_chr <- as.character(sort(unique(years)))
+
+  if (length(sample_n) == 1L) {
+    vals <- rep(as.integer(sample_n), length(years_chr))
+    names(vals) <- years_chr
+    return(vals)
+  }
+
+  if (is.null(names(sample_n))) {
+    if (length(sample_n) != length(years_chr)) {
+      cli::cli_abort(c(
+        "When `sample_n` has length > 1 and no names, it must match the number of years.",
+        "x" = "{length(sample_n)} provided for {length(years_chr)} years."
+      ))
+    }
+    vals <- as.integer(sample_n)
+    names(vals) <- years_chr
+    return(vals)
+  }
+
+  missing_years <- setdiff(years_chr, names(sample_n))
+  if (length(missing_years) > 0L) {
+    cli::cli_abort(c(
+      "Named `sample_n` is missing one or more years.",
+      "x" = "Missing year names: {paste(missing_years, collapse = ', ')}"
+    ))
+  }
+
+  vals <- as.integer(sample_n[years_chr])
+  names(vals) <- years_chr
+  vals
+}
+
+sample_by_year <- function(d, sample_n, context = "sampling") {
+  yrs <- sort(unique(d$year))
+  n_by_year <- resolve_sample_n(sample_n, yrs)
+
+  dplyr::group_by(d, year) |>
+    dplyr::group_modify(\(.x, .y) {
+      this_year <- as.character(.y$year[[1]])
+      n_this <- n_by_year[[this_year]]
+      if (nrow(.x) < n_this) {
+        cli::cli_abort(c(
+          "Not enough rows to sample in {.val {context}}.",
+          "x" = "Year {.val {this_year}} has {nrow(.x)} rows but requested {n_this}."
+        ))
+      }
+      dplyr::slice_sample(.x, n = n_this)
+    }) |>
+    dplyr::ungroup()
+}
+
 # sample_before_split = TRUE means apply sample_n first, then discard any gap
 # smaple_before_split = FALSE applies sample_n *after* cutting gap
 observe <- function(
@@ -113,7 +196,7 @@ observe <- function(
     north_yrs = seq(1, 9, 2), south_yrs = seq(2, 10, 2),
     sample_before_split = FALSE) {
   assertthat::assert_that(gap >= 0 && gap <= 0.99)
-  assertthat::assert_that(sample_n > 1L)
+  assertthat::assert_that(all(as.integer(sample_n) > 1L))
   assertthat::assert_that(all(north_yrs %in% sim_dat$year) &&
     all(south_yrs %in% sim_dat$year))
   assertthat::assert_that(region_cutoff > 0.05 && region_cutoff < 0.95)
@@ -123,9 +206,7 @@ observe <- function(
   set.seed(seed * 7)
 
   if (sample_before_split) {
-    d <- sim_dat %>%
-      group_by(year) %>%
-      sample_n(sample_n)
+    d <- sample_by_year(sim_dat, sample_n = sample_n, context = "pre-split sampling")
     # Lose ~half the survey most years -----------------------------------------
     north <- d[(d$year %in% union(north_yrs, both_yrs) & d$region == "north"), ]
     south <- d[(d$year %in% union(south_yrs, both_yrs) & d$region == "south"), ]
@@ -141,9 +222,7 @@ observe <- function(
       dplyr::arrange(year, X, Y)
     # Remove strip in middle to increase gap?
     d <- d[!(d$Y > (region_cutoff - gap / 2) & d$Y < (region_cutoff + gap / 2)), ]
-    d <- d %>%
-      group_by(year) %>%
-      sample_n(sample_n)
+    d <- sample_by_year(d, sample_n = sample_n, context = "post-split sampling")
   }
   d$sampled_region <- as.character(d$region)
   d$sampled_region[d$year %in% both_yrs] <- "both"
@@ -172,7 +251,9 @@ sim_fit_and_index <- function(
     year_arima.sim = list(ar = 0.5),
     make_plots = FALSE,
     save_plots = FALSE,
-    return_fits = FALSE, return_preds = FALSE, return_sim_dat = FALSE,
+    return_fits = FALSE, 
+    return_preds = FALSE, 
+    return_sim_dat = FALSE,
     return_obs_dat = FALSE,
     sim_coefs = c(2, 5)) {
   is_even <- function(x) x %% 2 == 0

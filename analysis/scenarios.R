@@ -2,11 +2,11 @@ n_year <- 12L
 
 base <- list(
   n_year = n_year,
-  label = "empty",
+  label = "empty", # to be filled
   gap_size = 0.25,
-  sim_coefs = c(2, 5),
+  sim_coefs = c(7, 0), # linear + quadratic effects on Y coordinate
   phi = 7,
-  obs_sampled_size = 200L, # or 200 if blocking first
+  obs_sampled_size = 200L,
   obs_yrs = list(
     north_yrs = seq(1, n_year - 1, 2), south_yrs = c(seq(2, n_year, 2))
   ),
@@ -15,11 +15,12 @@ base <- list(
   sigma_O = 1.2,
   sigma_E = 0.4,
   year_arima.sim = list(ar = 0.6),
-  year_marginal_sd = 0.3
+  year_marginal_sd = 0.3,
+  sample_before_split = FALSE
 )
 
 # N here should match number of scenarios below:
-sc <- purrr::map(seq_len(21L), ~base)
+sc <- purrr::map(seq_len(18L), ~base)
 
 i <- 1
 
@@ -67,12 +68,12 @@ i <- i + 1
 
 sc[[i]]$label <- "Low sample size"
 sc[[i]]$category <- "Sample size"
-sc[[i]]$obs_sampled_size <- 100L # FIXME
+sc[[i]]$obs_sampled_size <- 100L
 i <- i + 1
 
 sc[[i]]$label <- "High sample size"
 sc[[i]]$category <- "Sample size"
-sc[[i]]$obs_sampled_size <- 400L # FIXME
+sc[[i]]$obs_sampled_size <- 400L
 i <- i + 1
 
 # Year of overlap
@@ -86,8 +87,9 @@ i <- i + 1
 
 sc[[i]]$label <- "Year of overlap (double effort)"
 sc[[i]]$category <- "Year overlap"
-sc[[i]]$sample_before_split <- TRUE
 sc[[i]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
+sc[[i]]$obs_sampled_size <- setNames(rep(200L, n_year), seq_len(n_year))
+sc[[i]]$obs_sampled_size[as.character(n_year)] <- 400L
 i <- i + 1
 
 # Unequal regions
@@ -141,19 +143,19 @@ sc[[i]]$category <- "Annual correlation"
 sc[[i]]$year_arima.sim <- list(ar = 0)
 i <- i + 1
 
-# Annual extremes
-
-sc[[i]]$label <- "Years black-swan like"
-sc[[i]]$category <- "Annual extremes"
-sc[[i]]$heavy_sd_mult <- 6
-sc[[i]]$heavy_sd_frac <- 0.1
-i <- i + 1
-
-sc[[i]]$label <- "Years heavy-tailed mixture"
-sc[[i]]$category <- "Annual extremes"
-sc[[i]]$heavy_sd_mult <- 3
-sc[[i]]$heavy_sd_frac <- 1/3
-i <- i + 1
+# # Annual extremes
+#
+# sc[[i]]$label <- "Years black-swan like"
+# sc[[i]]$category <- "Annual extremes"
+# sc[[i]]$heavy_sd_mult <- 6
+# sc[[i]]$heavy_sd_frac <- 0.1
+# i <- i + 1
+#
+# sc[[i]]$label <- "Years heavy-tailed mixture"
+# sc[[i]]$category <- "Annual extremes"
+# sc[[i]]$heavy_sd_mult <- 3
+# sc[[i]]$heavy_sd_frac <- 1/3
+# i <- i + 1
 
 # # SVC trend from north to south; moderate
 #
