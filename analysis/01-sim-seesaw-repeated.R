@@ -57,13 +57,15 @@ if (FALSE) {
   # testing first:
   out <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = T, save_plots = T))
 
+  out <- do.call(sim_fit_and_index, c(sc[[12]], .seed = 1))
+
   actual <- select(out20, year, total, seed, sampled_region) |>
     distinct()
   actual
 
   out1 <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = FALSE))
 
-  ggplot(out20, aes(year, est, ymin = lwr, ymax = upr)) +
+  ggplot(out1, aes(year, est, ymin = lwr, ymax = upr)) +
     ggsidekick::theme_sleek() +
     geom_pointrange(aes(colour = sampled_region)) +
     geom_ribbon(alpha = 0.20, colour = NA) +
@@ -71,28 +73,43 @@ if (FALSE) {
       data = actual, mapping = aes(year, total),
       inherit.aes = FALSE, lty = 2
     ) +
-    facet_wrap( ~ paste(type, with_depth),
+    facet_wrap( ~ type,
       scales = "free_y"
     )
 }
 
-future::plan(future::multisession, workers = 8L)
+Sys.setenv(
+  OMP_NUM_THREADS = "1",
+  OPENBLAS_NUM_THREADS = "1"
+)
+
+seeds <- seq_len(4)
+tasks <- tidyr::crossing(
+  seed = seeds,
+  scen_i = seq_along(sc)
+)
+nrow(tasks)
+
+NCORES <- future::availableCores()
+
+future::plan(
+  future::multisession, 
+  workers = min(NCORES - 2L, nrow(tasks))
+)
 tictoc::tic()
-seeds <- seq_len(16L)
-# out_df <- purrr:::map_dfr(seeds[1], function(seed_i) {
-out_df <- furrr::future_map_dfr(seeds, function(seed_i) {
-  x <- list()
-  for (i in seq_along(sc)) {
-    sc[[i]]$.seed <- seed_i
-    x[[i]] <- do.call(sim_fit_and_index, sc[[i]])
-  }
-  names(x) <- names(sc)
-  bind_rows(x, .id = "label")
-# })
-}, .options = furrr::furrr_options(seed = TRUE))
+out_df <- furrr::future_pmap_dfr(
+  tasks,
+  function(seed, scen_i) {
+    out <- do.call(sim_fit_and_index, c(sc[[scen_i]], .seed = seed))
+    out$label <- names(sc)[scen_i]
+    out
+  },
+  .options = furrr::furrr_options(seed = TRUE, scheduling = 1)
+)
 tictoc::toc()
+future::plan(future::sequential)
+
 out_df2 <- left_join(out_df, lu, by = "label")
 dir.create("data-generated", showWarnings = FALSE)
-saveRDS(out_df2, "data-generated/sawtooth-sim-may3.rds")
-future::plan(future::sequential)
+saveRDS(out_df2, "data-generated/sawtooth-sim-apr20.rds")
 
