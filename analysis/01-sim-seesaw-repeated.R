@@ -83,7 +83,7 @@ Sys.setenv(
   OPENBLAS_NUM_THREADS = "1"
 )
 
-seeds <- seq_len(4)
+seeds <- seq_len(1)
 tasks <- tidyr::crossing(
   seed = seeds,
   scen_i = seq_along(sc)

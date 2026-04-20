@@ -53,6 +53,19 @@ build_model_specs <- function() {
       )
     ),
     list(
+      name = "RW RF, fixed 0.1 RW year",
+      fit_args = list(
+        formula = observed ~ 0,
+        time_varying = ~1,
+        time_varying_type = "rw",
+        spatiotemporal = "rw"
+      ),
+      control = sdmTMB::sdmTMBcontrol(
+        start = list(ln_tau_V = matrix(log(0.1), nrow = 1, ncol = 1L)),
+        map = list(ln_tau_V = rep(factor(NA), 1L))
+      )
+    ),
+    list(
       name = "RW RF, factor(year_pairs)",
       data_key = "pairs",
       fit_args = list(

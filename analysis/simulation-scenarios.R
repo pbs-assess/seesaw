@@ -47,7 +47,7 @@ i <- i + 1
 
 # Covariate
 
-sc[[i]]$label <- "No covariate"
+sc[[i]]$label <- "No abundance gradient"
 sc[[i]]$category <- "Abundance gradient"
 sc[[i]]$sim_coefs <- c(0, 0)
 i <- i + 1

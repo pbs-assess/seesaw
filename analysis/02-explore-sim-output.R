@@ -1,11 +1,11 @@
-out_df <- readRDS("data-generated/sawtooth-sim-may3.rds")
+out_df <- readRDS("data-generated/sawtooth-sim-apr20.rds")
 
 # out_df$label <- forcats::fct_inorder(out_df$label)
 
 cols <- RColorBrewer::brewer.pal(3L, "Set2")
 names(cols) <- c("north", "south", "both")
 
-seed_to_plot <- 4
+seed_to_plot <- 1
 actual <- select(out_df, label, year, total, seed, sampled_region) |>
   filter(seed == seed_to_plot) |>
   distinct()
@@ -17,6 +17,7 @@ actual2 <- mutate(actual, label = gsub("obs", "\\\nobs", label)) |>
 g <- out_df |>
   filter(seed == seed_to_plot) |>
   mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
+  mutate(type_facet = gsub(",\\s*", ",\n", type)) |>
   mutate(label = gsub("obs", "\\\nobs", label)) |>
   mutate(label = gsub("black", "\\\nblack", label)) |>
   mutate(label = gsub("mixture", "\\\nmixture", label)) |>
@@ -30,7 +31,7 @@ g <- out_df |>
     data = actual2, mapping = aes(year, total),
     inherit.aes = FALSE, lty = 2
   ) +
-  facet_grid(forcats::fct_inorder(label) ~ paste(type, with_depth),
+  facet_grid(forcats::fct_inorder(label) ~ type_facet,
     scales = "free_y"
   ) +
   ylab("Abundance estimate") +
@@ -40,7 +41,7 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 # print(g)
-ggsave("figs/saw-tooth-scenarios-2026-02-20.pdf", width = 15, height = 24)
+ggsave("figs/saw-tooth-scenarios-2026-04-20.pdf", width = 28, height = 23)
 
 # a minimal version for the main text:
 seed_to_plot <- 3
