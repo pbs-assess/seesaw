@@ -38,7 +38,7 @@ sim <- function(
   rho = 0,
   sigma_E = 0.4,
   range = 0.8,
-  tweedie_p = 1.6,
+  tweedie_p = 1.5,
   sigma_O = 1.6,
   coefs = c(2.2, 3.8),
   year_mean = 1,
@@ -170,14 +170,89 @@ resolve_sample_n <- function(sample_n, years) {
   vals
 }
 
-sample_by_year <- function(d, sample_n, context = "sampling") {
+resolve_overlap_north_frac <- function(overlap_north_frac, overlap_years) {
+  if (is.null(overlap_north_frac)) {
+    return(NULL)
+  }
+
+  years_chr <- as.character(sort(unique(overlap_years)))
+  if (length(years_chr) == 0L) {
+    cli::cli_abort("`overlap_north_frac` was provided but there are no overlap years.")
+  }
+
+  if (length(overlap_north_frac) == 1L) {
+    vals <- rep(as.numeric(overlap_north_frac), length(years_chr))
+    names(vals) <- years_chr
+  } else if (is.null(names(overlap_north_frac))) {
+    if (length(overlap_north_frac) != length(years_chr)) {
+      cli::cli_abort(c(
+        "When `overlap_north_frac` has length > 1 and no names, it must match the number of overlap years.",
+        "x" = "{length(overlap_north_frac)} provided for {length(years_chr)} overlap years."
+      ))
+    }
+    vals <- as.numeric(overlap_north_frac)
+    names(vals) <- years_chr
+  } else {
+    missing_years <- setdiff(years_chr, names(overlap_north_frac))
+    if (length(missing_years) > 0L) {
+      cli::cli_abort(c(
+        "Named `overlap_north_frac` is missing one or more overlap years.",
+        "x" = "Missing overlap year names: {paste(missing_years, collapse = ', ')}"
+      ))
+    }
+    vals <- as.numeric(overlap_north_frac[years_chr])
+    names(vals) <- years_chr
+  }
+
+  if (any(is.na(vals) | vals < 0 | vals > 1)) {
+    cli::cli_abort("All values in `overlap_north_frac` must be numeric and between 0 and 1.")
+  }
+  vals
+}
+
+sample_by_year <- function(d, sample_n, context = "sampling", north_frac_by_year = NULL) {
   yrs <- sort(unique(d$year))
   n_by_year <- resolve_sample_n(sample_n, yrs)
+  if (!is.null(north_frac_by_year)) {
+    unknown_years <- setdiff(names(north_frac_by_year), as.character(yrs))
+    if (length(unknown_years) > 0L) {
+      cli::cli_abort(c(
+        "Some years in `north_frac_by_year` are not present in the data.",
+        "x" = "Unknown years: {paste(unknown_years, collapse = ', ')}"
+      ))
+    }
+  }
 
   dplyr::group_by(d, year) |>
     dplyr::group_modify(\(.x, .y) {
       this_year <- as.character(.y$year[[1]])
       n_this <- n_by_year[[this_year]]
+      if (!is.null(north_frac_by_year) && this_year %in% names(north_frac_by_year)) {
+        frac_north <- north_frac_by_year[[this_year]]
+        n_north <- as.integer(round(n_this * frac_north))
+        n_south <- as.integer(n_this - n_north)
+        north_dat <- dplyr::filter(.x, region == "north")
+        south_dat <- dplyr::filter(.x, region == "south")
+
+        if (nrow(north_dat) < n_north) {
+          cli::cli_abort(c(
+            "Not enough north-region rows for requested overlap sampling.",
+            "x" = "Year {.val {this_year}} has {nrow(north_dat)} north rows but requested {n_north}."
+          ))
+        }
+        if (nrow(south_dat) < n_south) {
+          cli::cli_abort(c(
+            "Not enough south-region rows for requested overlap sampling.",
+            "x" = "Year {.val {this_year}} has {nrow(south_dat)} south rows but requested {n_south}."
+          ))
+        }
+
+        return(dplyr::bind_rows(
+          dplyr::slice_sample(north_dat, n = n_north),
+          dplyr::slice_sample(south_dat, n = n_south)
+        ))
+      }
+
       if (nrow(.x) < n_this) {
         cli::cli_abort(c(
           "Not enough rows to sample in {.val {context}}.",
@@ -194,6 +269,7 @@ sample_by_year <- function(d, sample_n, context = "sampling") {
 observe <- function(
     sim_dat, sample_n = 300L, seed = 10282, gap = 0, region_cutoff = 0.5,
     north_yrs = seq(1, 9, 2), south_yrs = seq(2, 10, 2),
+    overlap_north_frac = NULL,
     sample_before_split = FALSE) {
   assertthat::assert_that(gap >= 0 && gap <= 0.99)
   assertthat::assert_that(all(as.integer(sample_n) > 1L))
@@ -202,8 +278,13 @@ observe <- function(
   assertthat::assert_that(region_cutoff > 0.05 && region_cutoff < 0.95)
 
   both_yrs <- intersect(north_yrs, south_yrs)
+  overlap_north_by_year <- resolve_overlap_north_frac(overlap_north_frac, both_yrs)
 
   set.seed(seed * 7)
+
+  if (!is.null(overlap_north_by_year) && sample_before_split) {
+    cli::cli_abort("`overlap_north_frac` requires `sample_before_split = FALSE`.")
+  }
 
   if (sample_before_split) {
     d <- sample_by_year(sim_dat, sample_n = sample_n, context = "pre-split sampling")
@@ -222,7 +303,12 @@ observe <- function(
       dplyr::arrange(year, X, Y)
     # Remove strip in middle to increase gap?
     d <- d[!(d$Y > (region_cutoff - gap / 2) & d$Y < (region_cutoff + gap / 2)), ]
-    d <- sample_by_year(d, sample_n = sample_n, context = "post-split sampling")
+    d <- sample_by_year(
+      d,
+      sample_n = sample_n,
+      context = "post-split sampling",
+      north_frac_by_year = overlap_north_by_year
+    )
   }
   d$sampled_region <- as.character(d$region)
   d$sampled_region[d$year %in% both_yrs] <- "both"
@@ -239,6 +325,7 @@ sim_fit_and_index <- function(
       north_yrs = seq(1, n_year - 1, 2),
       south_yrs = seq(2, n_year, 2)
     ),
+    overlap_north_frac = NULL,
     phi = 8,
     region_cutoff = 0.5,
     range = 0.5,
@@ -266,7 +353,7 @@ sim_fit_and_index <- function(
     X = seq(0, 1, length.out = 100), Y = seq(0, 1, length.out = 100),
     year = seq_len(n_year)
   )
-  mesh_sim <- make_mesh(predictor_grid, xy_cols = c("X", "Y"), cutoff = 0.1)
+  mesh_sim <- make_mesh(predictor_grid, xy_cols = c("X", "Y"), cutoff = 0.05)
 
   cli::cli_alert_success("Simulating...")
   x <- sim(predictor_grid, mesh_sim,
@@ -324,6 +411,7 @@ sim_fit_and_index <- function(
     region_cutoff = region_cutoff,
     seed = .seed,
     north_yrs = obs_yrs$north_yrs,
+    overlap_north_frac = overlap_north_frac,
     sample_before_split = sample_before_split,
     south_yrs = obs_yrs$south_yrs, gap = gap_size
   )
@@ -371,12 +459,11 @@ sim_fit_and_index <- function(
   # Fit models --------------------------------------------------------------
 
   cli::cli_alert_success("Fitting models...")
-  mesh <- make_mesh(d, c("X", "Y"), cutoff = 0.1)
-  priors <- sdmTMBpriors(
-    matern_s = pc_matern(range_gt = 0.2, sigma_lt = 1.5),
-    matern_st = pc_matern(range_gt = 0.2, sigma_lt = 0.5)
-  )
-  # priors <- sdmTMBpriors()
+  mesh <- make_mesh(d, c("X", "Y"), cutoff = 0.05)
+  # priors <- sdmTMBpriors(
+  #   matern_s = pc_matern(range_gt = 0.2, sigma_lt = 1.5),
+  #   matern_st = pc_matern(range_gt = 0.2, sigma_lt = 0.5)
+  # )
 
   ctl <- sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)
 
@@ -397,9 +484,36 @@ sim_fit_and_index <- function(
   model_specs <- build_model_specs()
 
   data_lookup <- list(base = d, pairs = d_pairs)
+  formula_has_factor_region <- function(formula_obj) {
+    if (is.null(formula_obj)) {
+      return(FALSE)
+    }
+    term_labels <- attr(stats::terms(formula_obj), "term.labels")
+    any(grepl("factor(region)", term_labels, fixed = TRUE))
+  }
+  has_year_with_both_regions <- function(dat) {
+    if (!all(c("year", "region") %in% names(dat))) {
+      return(FALSE)
+    }
+    dat |>
+      dplyr::distinct(year, region) |>
+      dplyr::count(year, name = "n_regions") |>
+      dplyr::summarise(any_overlap = any(n_regions > 1L)) |>
+      dplyr::pull(any_overlap)
+  }
   fit_one <- function(spec) {
     cli::cli_inform("Fitting {.val {spec$name}}")
     control_this <- if (is.null(spec$control)) ctl else spec$control
+    fit_args_core <- spec$fit_args
+    prior_from_fit_args <- fit_args_core$priors
+    prior_this <- if (!is.null(spec$priors)) {
+      spec$priors
+    } else if (!is.null(prior_from_fit_args)) {
+      prior_from_fit_args
+    } else {
+      sdmTMB::sdmTMBpriors()
+    }
+    fit_args_core$priors <- NULL
     data_key <- if (is.null(spec$data_key)) "base" else spec$data_key
     if (!data_key %in% names(data_lookup)) {
       cli::cli_abort(c(
@@ -408,17 +522,27 @@ sim_fit_and_index <- function(
         "x" = "Got: {.val {data_key}}."
       ))
     }
+    data_this <- data_lookup[[data_key]]
+
+    if (formula_has_factor_region(fit_args_core$formula) &&
+      !isTRUE(has_year_with_both_regions(data_this))) {
+      cli::cli_inform(c(
+        "Skipping {.val {spec$name}}: no year has both north and south sampled.",
+        "i" = "Returning {.val NA} to mimic non-convergence."
+      ))
+      return(NA)
+    }
 
     fit_args <- c(
-      spec$fit_args,
+      fit_args_core,
       list(
         family = tweedie(),
-        data = data_lookup[[data_key]],
+        data = data_this,
         time = "year",
         spatial = "on",
         silent = TRUE,
         mesh = mesh,
-        priors = priors,
+        priors = prior_this,
         control = control_this
       )
     )

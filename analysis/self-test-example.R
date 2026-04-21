@@ -9,11 +9,11 @@ library(sdmTMB)
 
 # bring in set and grid data ------------------------------------
 
-# CASE <- "quillback inside"
-# SURVEY <- "inside"
+CASE <- "quillback inside"
+SURVEY <- "inside"
 
-CASE <- "lingcod synoptic"
-SURVEY <- "synoptic"
+# CASE <- "lingcod synoptic"
+# SURVEY <- "synoptic"
 
 if (CASE == "quillback inside") {
   d <- readRDS("~/src/gfsynopsis-2022/report/data-cache-nov-2023/quillback-rockfish.rds")$survey_sets
@@ -22,7 +22,7 @@ if (CASE == "quillback inside") {
   d <- filter(d, !(year == 2021 & survey_abbrev %in% "HBLL INS N"))
   d <- mutate(d, response = catch_count, log_effort = log(hook_count))
   d$biennial_region <- as.integer(as.factor(d$survey_abbrev))
-  family <- "nb"
+  family <- sdmTMB::nbinom2()
 }
 
 if (SURVEY == "inside") {
@@ -55,7 +55,7 @@ if (CASE == "lingcod synoptic") {
   table(d$year, d$biennial_region)
 
   d <- mutate(d, observed = density_kgkm2, log_effort = log(area_swept))
-  family <- tweedie()
+  family <- tweedi::e()
 }
 
 if (SURVEY == "synoptic") {
@@ -65,7 +65,7 @@ if (SURVEY == "synoptic") {
 # fit initial models --------------------------------------------
 
 d <- add_utm_columns(d)
-mesh <- make_mesh(d, c("X", "Y"), cutoff = 15)
+mesh <- make_mesh(nd, c("X", "Y"), cutoff = 8)
 plot(mesh)
 
 fit <- sdmTMB(

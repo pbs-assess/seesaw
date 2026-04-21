@@ -3,24 +3,24 @@ n_year <- 12L
 base <- list(
   n_year = n_year,
   label = "empty", # to be filled
-  gap_size = 0.25,
+  gap_size = 0,
   sim_coefs = c(7, 0), # linear + quadratic effects on Y coordinate
-  phi = 7,
+  phi = 15,
   obs_sampled_size = 200L,
   obs_yrs = list(
     north_yrs = seq(1, n_year - 1, 2), south_yrs = c(seq(2, n_year, 2))
   ),
   region_cutoff = 0.50,
-  range = 0.5,
-  sigma_O = 1.2,
-  sigma_E = 0.4,
+  range = 0.1,
+  sigma_O = 1.5,
+  sigma_E = 1,
   year_arima.sim = list(ar = 0.6),
   year_marginal_sd = 0.3,
   sample_before_split = FALSE
 )
 
 # N here should match number of scenarios below:
-sc <- purrr::map(seq_len(19L), ~base)
+sc <- purrr::map(seq_len(20L), ~base)
 
 i <- 1
 
@@ -30,19 +30,14 @@ i <- i + 1
 
 # Gap
 
-sc[[i]]$label <- "No gap"
-sc[[i]]$category <- "Gap"
-sc[[i]]$gap_size <- 0
-i <- i + 1
-
 sc[[i]]$label <- "Large gap"
 sc[[i]]$category <- "Gap"
-sc[[i]]$gap_size <- 0.5
+sc[[i]]$gap_size <- 0.15
 i <- i + 1
 
 sc[[i]]$label <- "Small gap"
 sc[[i]]$category <- "Gap"
-sc[[i]]$gap_size <- 0.1
+sc[[i]]$gap_size <- 0.05
 i <- i + 1
 
 # Covariate
@@ -56,12 +51,12 @@ i <- i + 1
 
 sc[[i]]$label <- "Low observation error"
 sc[[i]]$category <- "Observation error"
-sc[[i]]$phi <- 3
+sc[[i]]$phi <- 5
 i <- i + 1
 
 sc[[i]]$label <- "High observation error"
 sc[[i]]$category <- "Observation error"
-sc[[i]]$phi <- 14
+sc[[i]]$phi <- 20
 i <- i + 1
 
 # Observation sample size
@@ -76,25 +71,33 @@ sc[[i]]$category <- "Sample size"
 sc[[i]]$obs_sampled_size <- 400L
 i <- i + 1
 
-# Year of overlap
+# Year of overlap (same effort)
 
-sc[[i]]$label <- "Year of overlap (same effort)"
+sc[[i]]$label <- "Year of partial overlap, (25%; same effort)"
 sc[[i]]$category <- "Coverage"
 sc[[i]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
+sc[[i]]$overlap_north_frac <- setNames(0.25, n_year)
+i <- i + 1
+
+sc[[i]]$label <- "Year of partial overlap, (50%; same effort)"
+sc[[i]]$category <- "Coverage"
+sc[[i]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
+sc[[i]]$overlap_north_frac <- setNames(0.5, n_year)
 i <- i + 1
 
 # Year of overlap (and double effort overall)
 
-sc[[i]]$label <- "Year of overlap (double effort)"
+sc[[i]]$label <- "Year of overlap, (double effort)"
 sc[[i]]$category <- "Coverage"
 sc[[i]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
 sc[[i]]$obs_sampled_size <- setNames(rep(200L, n_year), seq_len(n_year))
 sc[[i]]$obs_sampled_size[as.character(n_year)] <- 400L
+sc[[i]]$overlap_north_frac <- setNames(0.5, n_year)
 i <- i + 1
 
 # Full domain coverage every year (minus gap), fixed effort
 
-sc[[i]]$label <- "Both regions every year (same effort)"
+sc[[i]]$label <- "Both regions every year, (same effort)"
 sc[[i]]$category <- "Coverage"
 sc[[i]]$obs_yrs <- list(
   north_yrs = seq_len(n_year),
@@ -103,30 +106,28 @@ sc[[i]]$obs_yrs <- list(
 sc[[i]]$obs_sampled_size <- 200L
 i <- i + 1
 
-# Unequal regions
-
-# sc[[i]]$label <- "Unequal regions"
-# sc[[i]]$category <- "Region size"
-# sc[[i]]$region_cutoff <- 0.25
-# i <- i + 1
-
 # Range size
 
 sc[[i]]$label <- "Low range"
 sc[[i]]$category <- "Range"
-sc[[i]]$range <- 0.2  # .25, .5, 1 cod nfld: 180/
+sc[[i]]$range <- 0.05  # .25, .5, 1 cod nfld: 180/
 i <- i + 1
 
 sc[[i]]$label <- "High range"
 sc[[i]]$category <- "Range"
-sc[[i]]$range <- 0.8  # .25, .5, 1 cod nfld: 180/
+sc[[i]]$range <- 0.3  # .25, .5, 1 cod nfld: 180/
 i <- i + 1
 
 # Marginal RF SD
 
 sc[[i]]$label <- "Low sigma O"
 sc[[i]]$category <- "Spatial SD"
-sc[[i]]$sigma_O <- 0.4
+sc[[i]]$sigma_O <- 0.5
+i <- i + 1
+
+sc[[i]]$label <- "High sigma O"
+sc[[i]]$category <- "Spatial SD"
+sc[[i]]$sigma_O <- 2.5
 i <- i + 1
 
 # Annual variability stuff N(0, SD)

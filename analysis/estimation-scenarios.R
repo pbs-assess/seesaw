@@ -14,57 +14,58 @@ build_model_specs <- function() {
         spatiotemporal = "ar1"
       )
     ),
-    list(
-      name = "AR(1) RF, factor(year)",
-      fit_args = list(
-        formula = observed ~ 0 + as.factor(year),
-        spatiotemporal = "ar1"
-      )
-    ),
-    list(
-      name = "AR(1) RF, RW year",
-      fit_args = list(
-        formula = observed ~ 0,
-        time_varying = ~1,
-        time_varying_type = "rw",
-        spatiotemporal = "ar1"
-      )
-    ),
+    # list(
+    #   name = "AR(1) RF, factor(year)",
+    #   fit_args = list(
+    #     formula = observed ~ 0 + as.factor(year),
+    #     spatiotemporal = "ar1"
+    #   )
+    # ),
+    # list(
+    #   name = "AR(1) RF, RW year",
+    #   fit_args = list(
+    #     formula = observed ~ 0,
+    #     time_varying = ~1,
+    #     time_varying_type = "rw",
+    #     spatiotemporal = "ar1"
+    #   )
+    # ),
     list(
       name = "RW RF, RW year",
       fit_args = list(
         formula = observed ~ 0,
         time_varying = ~1,
         time_varying_type = "rw",
-        spatiotemporal = "rw"
+        spatiotemporal = "rw",
+        priors = sdmTMB::sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5))
       )
     ),
-    list(
-      name = "RW RF, fixed 0.3 RW year",
-      fit_args = list(
-        formula = observed ~ 0,
-        time_varying = ~1,
-        time_varying_type = "rw",
-        spatiotemporal = "rw"
-      ),
-      control = sdmTMB::sdmTMBcontrol(
-        start = list(ln_tau_V = matrix(log(0.3), nrow = 1, ncol = 1L)),
-        map = list(ln_tau_V = rep(factor(NA), 1L))
-      )
-    ),
-    list(
-      name = "RW RF, fixed 0.1 RW year",
-      fit_args = list(
-        formula = observed ~ 0,
-        time_varying = ~1,
-        time_varying_type = "rw",
-        spatiotemporal = "rw"
-      ),
-      control = sdmTMB::sdmTMBcontrol(
-        start = list(ln_tau_V = matrix(log(0.1), nrow = 1, ncol = 1L)),
-        map = list(ln_tau_V = rep(factor(NA), 1L))
-      )
-    ),
+    # list(
+    #   name = "RW RF, fixed 0.3 RW year",
+    #   fit_args = list(
+    #     formula = observed ~ 0,
+    #     time_varying = ~1,
+    #     time_varying_type = "rw",
+    #     spatiotemporal = "rw"
+    #   ),
+    #   control = sdmTMB::sdmTMBcontrol(
+    #     start = list(ln_tau_V = matrix(log(0.3), nrow = 1, ncol = 1L)),
+    #     map = list(ln_tau_V = rep(factor(NA), 1L))
+    #   )
+    # ),
+    # list(
+    #   name = "RW RF, fixed 0.1 RW year",
+    #   fit_args = list(
+    #     formula = observed ~ 0,
+    #     time_varying = ~1,
+    #     time_varying_type = "rw",
+    #     spatiotemporal = "rw"
+    #   ),
+    #   control = sdmTMB::sdmTMBcontrol(
+    #     start = list(ln_tau_V = matrix(log(0.1), nrow = 1, ncol = 1L)),
+    #     map = list(ln_tau_V = rep(factor(NA), 1L))
+    #   )
+    # ),
     list(
       name = "RW RF, factor(year_pairs)",
       data_key = "pairs",
@@ -81,9 +82,9 @@ build_model_specs <- function() {
       )
     ),
     list(
-      name = "IID RF, s(year)",
+      name = "IID RF, s(year, k = 5)",
       fit_args = list(
-        formula = observed ~ s(year),
+        formula = observed ~ s(year, k = 5),
         spatiotemporal = "iid"
       )
     ),
@@ -101,17 +102,17 @@ build_model_specs <- function() {
         spatiotemporal = "iid"
       )
     ),
+    # list(
+    #   name = "IID RF, RW year",
+    #   fit_args = list(
+    #     formula = observed ~ 0,
+    #     time_varying = ~1,
+    #     time_varying_type = "rw",
+    #     spatiotemporal = "iid"
+    #   )
+    # ),
     list(
       name = "IID RF, RW year",
-      fit_args = list(
-        formula = observed ~ 0,
-        time_varying = ~1,
-        time_varying_type = "rw",
-        spatiotemporal = "iid"
-      )
-    ),
-    list(
-      name = "IID RF, RW year + gamma(0.3, 0.5) prior",
       fit_args = list(
         formula = observed ~ 0,
         time_varying = ~1,
@@ -120,22 +121,22 @@ build_model_specs <- function() {
         priors = sdmTMB::sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5))
       )
     ),
-    list(
-      name = "IID RF, AR1 year",
-      fit_args = list(
-        formula = observed ~ 1,
-        time_varying = ~1,
-        time_varying_type = "ar1",
-        spatiotemporal = "iid"
-      )
-    ),
-    list(
-      name = "IID RF, (1|year)",
-      fit_args = list(
-        formula = observed ~ 1 + (1 | fyear),
-        spatiotemporal = "iid"
-      )
-    ),
+    # list(
+    #   name = "IID RF, AR1 year",
+    #   fit_args = list(
+    #     formula = observed ~ 1,
+    #     time_varying = ~1,
+    #     time_varying_type = "ar1",
+    #     spatiotemporal = "iid"
+    #   )
+    # ),
+    # list(
+    #   name = "IID RF, (1|year)",
+    #   fit_args = list(
+    #     formula = observed ~ 1 + (1 | fyear),
+    #     spatiotemporal = "iid"
+    #   )
+    # ),
     list(
       name = "Spatial only, factor(year)",
       fit_args = list(
@@ -151,16 +152,16 @@ build_model_specs <- function() {
         time_varying_type = "rw",
         spatiotemporal = "off"
       )
-    ),
-    list(
-      name = "Spatial only, AR(1) year",
-      fit_args = list(
-        formula = observed ~ 1,
-        time_varying = ~1,
-        time_varying_type = "ar1",
-        spatiotemporal = "off"
-      )
     )
+    # list(
+    #   name = "Spatial only, AR(1) year",
+    #   fit_args = list(
+    #     formula = observed ~ 1,
+    #     time_varying = ~1,
+    #     time_varying_type = "ar1",
+    #     spatiotemporal = "off"
+    #   )
+    # )
   )
 }
 
