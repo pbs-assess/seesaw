@@ -59,7 +59,7 @@ labels <- c("Base", "No gap", "Large gap", "High range", "Low range")
 SCALER <- 1e4
 out_df |>
   filter(seed == seed_to_plot) |>
-  filter(label %in% labels, with_depth == "covariate = FALSE", model %in% c("RW", "IID", "IID RW year")) |>
+  filter(label %in% labels, with_depth == "covariate = FALSE", model %in% c("RW RF", "IID RF, factor(year)", "IID RF, RW year")) |>
   mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
   mutate(label = gsub("obs", "\\\nobs", label)) |>
   mutate(label = gsub("black", "\\\nblack", label)) |>
@@ -132,35 +132,38 @@ out_df |>
     levels = c("seesaw_index", "rmse", "mre", "mean_se", "coverage")
   )) |>
   ggplot(aes(value, model)) +
-  geom_point(pch = 21, size = 1.6) +
+  geom_point(pch = 21) +
   facet_wrap(~metric, scales = "free_x", nrow = 1L) +
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
+ggsave("figs/dot-plot-metrics.pdf", width = 10, height = 4)
 
 # ---------------------
 # get at distribution
 
+# assign an indicator for every 2nd year:
+lu <- data.frame(year = sort(unique(out_df$year)))
+is_odd <- function(x) x %% 2 != 0
+lu$odd <- is_odd(lu$year)
+
 temp <- out_df |>
+  left_join(lu) |> 
   group_by(label, seed, model) |>
   mutate(log_residual = log(total) - log(est)) |>
   summarise(
-    seesaw_index1 = abs(mean(log_residual[sampled_region == "north" & year < 7]) -
-        mean(log_residual[sampled_region == "south" & year < 7])),
-    seesaw_index2 = abs(mean(log_residual[sampled_region == "north" & year >= 7]) -
-        mean(log_residual[sampled_region == "south" & year >= 7])),
+    seesaw_index = abs(mean(log_residual[odd]) - mean(log_residual[!odd])),
     mre = mean(log_residual),
     rmse = sqrt(mean(log_residual^2)),
     mean_se = mean(se),
     coverage = mean(total < upr & total > lwr)
   ) |>
-  mutate(seesaw_index = (seesaw_index1 + seesaw_index2) / 2) |>
   tidyr::pivot_longer(cols = -c(model, seed, label), names_to = "metric") |>
   mutate(metric = factor(metric,
     levels = c("seesaw_index", "rmse", "mre", "mean_se", "coverage")
   )) |>
   group_by(label, model, metric) |>
-  summarise(lwr = quantile(value, 0.2), upr = quantile(value, 0.8), med = quantile(value, 0.5))
+  summarise(lwr = quantile(value, 0.2, na.rm = TRUE), upr = quantile(value, 0.8, na.rm = TRUE), med = quantile(value, 0.5, na.rm = TRUE))
 
 saw_tooth_ind <- temp |> filter(metric == "seesaw_index") |>
   group_by(model) |>
@@ -181,7 +184,7 @@ g <- temp |>
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
 g
-ggsave("figs/saw-tooth-metrics-all-May3.pdf", width = 7, height = 25)
+ggsave("figs/saw-tooth-metrics-all-apr20.pdf", width = 7, height = 45)
 
 # ---------------------------------------------------------------------
 # together in one set of panels?
@@ -201,9 +204,8 @@ g <- temp |>
   )) |>
   mutate(label = gsub("obs", "\\\nobs", label)) |>
   filter(!model %in% c("SVC trend, spatial only", "SVC trend, IID fields")) |> 
-  # ggplot(aes(x = forcats::fct_reorder(model, med_st_index), y = med, colour = label)) +
   ggplot(aes(x = forcats::fct_reorder(model, med_st_index), y = med, group = label)) +
-  geom_point(pch = 21, position = position_dodge(width = 0.2), alpha = 0.8) +
+  geom_point(pch = 21, position = position_dodge(width = 0.2), alpha = 0.5) +
   # geom_linerange(aes(ymin = lwr, ymax = upr), position = position_dodge(width = 0.5)) +
   facet_wrap(~metric, scales = "free_x", nrow = 1) +
   ggsidekick::theme_sleek() +
@@ -211,25 +213,25 @@ g <- temp |>
   ylab("Metric value") +
   coord_flip()
 g
-ggsave("figs/saw-tooth-metrics-condensed.pdf", width = 6.8, height = 3)
+ggsave("figs/saw-tooth-metrics-condensed-apr20.pdf", width = 7, height = 4)
 
 # ----------------------
 
 temp <- out_df |>
+  left_join(lu) |> 
   group_by(label, model, seed) |>
   mutate(log_residual = log(total) - log(est)) |>
   summarise(
-    seesaw_index = abs(mean(log_residual[sampled_region == "north"]) -
-      mean(log_residual[sampled_region == "south"]))
+    seesaw_index = abs(mean(log_residual[odd]) - mean(log_residual[!odd]))
   ) |>
   group_by(label, model) |>
   summarize(
-    lwr = quantile(seesaw_index, 0.2),
-    upr = quantile(seesaw_index, 0.8),
-    med = median(seesaw_index)
+    lwr = quantile(seesaw_index, 0.2, na.rm=TRUE),
+    upr = quantile(seesaw_index, 0.8, na.rm=TRUE),
+    med = median(seesaw_index, na.rm=TRUE)
   ) |>
   ungroup() |>
-  filter(model == "IID")
+  filter(model == "IID RF, factor(year)")
 
 temp |>
   ggplot(aes(med, forcats::fct_reorder(label, med))) +
@@ -240,7 +242,7 @@ temp |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey95"), axis.title.y.left = element_blank()) +
   xlab("Seesaw metric")
-ggsave("figs/saw-tooth-bad-iid-dec14.pdf", width = 4.2, height = 4.5)
+ggsave("figs/saw-tooth-bad-iid-apr20.pdf", width = 4.2, height = 4.5)
 
 # Figures
 # Spatial setup example
