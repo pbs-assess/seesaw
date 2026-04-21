@@ -244,6 +244,36 @@ temp |>
   xlab("Seesaw metric")
 ggsave("figs/saw-tooth-bad-iid-apr20.pdf", width = 4.2, height = 4.5)
 
+# converence?
+
+total_tasks <- out_df |>
+  distinct(seed, label) |>
+  nrow()
+
+conv <- out_df |>
+  distinct(seed, label, model) |>
+  count(model, name = "n_converged") |>
+  mutate(
+    total_tasks = total_tasks,
+    convergence_rate = n_converged / total_tasks,
+    convergence_rate_pct = 100 * convergence_rate
+  )
+
+ggplot(conv, aes(convergence_rate_pct, forcats::fct_reorder(model, convergence_rate_pct))) +
+  geom_linerange(aes(xmin = 0, xmax = convergence_rate_pct), linewidth = 0.4, colour = "grey45") +
+  geom_point(pch = 21, fill = "grey70", colour = "grey30") +
+  ggsidekick::theme_sleek() +
+  scale_x_continuous(
+    limits = c(0, 100),
+    expand = c(0, 0)
+  ) +
+  labs(
+    x = "Convergence rate across seed \u00d7 scenario",
+    y = "Model"
+  )
+ggsave("figs/convergence-by-model-apr20.pdf", width = 7.5, height = 4.5)
+
+
 # Figures
 # Spatial setup example
 # time series example(s) from one seed?
