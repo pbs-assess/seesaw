@@ -111,6 +111,16 @@ build_model_specs <- function() {
       )
     ),
     list(
+      name = "IID RF, RW year + gamma(0.3, 0.5) prior",
+      fit_args = list(
+        formula = observed ~ 0,
+        time_varying = ~1,
+        time_varying_type = "rw",
+        spatiotemporal = "iid",
+        priors = sdmTMB::sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5))
+      )
+    ),
+    list(
       name = "IID RF, AR1 year",
       fit_args = list(
         formula = observed ~ 1,
@@ -152,4 +162,18 @@ build_model_specs <- function() {
       )
     )
   )
+}
+
+if (FALSE) {
+  dgamma_cv <- function(x, mean, cv, log = FALSE) {
+    shape <- 1 / cv^2
+    rate  <- 1 / (mean * cv^2)   # equivalently: shape / mean
+    dgamma(x, shape = shape, rate = rate, log = log)
+  }
+  rgamma_cv <- function(n, mean, cv) {
+    rgamma(n, shape = 1/cv^2, rate = 1/(mean*cv^2))
+  }
+  x <- seq(0.001, 1, length.out = 300)
+  plot(x, dgamma_cv(x, 0.3, 0.5), type = "l")
+  abline(v = 0.3)
 }
