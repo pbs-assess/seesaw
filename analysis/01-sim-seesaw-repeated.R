@@ -83,33 +83,60 @@ Sys.setenv(
   OPENBLAS_NUM_THREADS = "1"
 )
 
+sanitize_scenario_name <- function(x) {
+  x <- tolower(x)
+  x <- gsub("[^a-z0-9]+", "-", x)
+  x <- gsub("(^-+|-+$)", "", x)
+  x <- gsub("-+", "-", x)
+  ifelse(nchar(x) == 0L, "scenario", x)
+}
+
+output_file <- "data-generated/sawtooth-sim-apr20.rds"
+cache_dir <- "data-generated/sawtooth-sim-apr20-cache"
+dir.create("data-generated", showWarnings = FALSE)
+dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
+
 seeds <- seq_len(1)
+scenario_slugs <- make.unique(vapply(names(sc), sanitize_scenario_name, character(1)), sep = "-dup-")
 tasks <- tidyr::crossing(
   seed = seeds,
   scen_i = seq_along(sc)
-)
-nrow(tasks)
+) |>
+  mutate(
+    scenario_slug = scenario_slugs[scen_i],
+    scenario_label = names(sc)[scen_i],
+    cache_file = file.path(cache_dir, sprintf("seed-%03d__scenario-%s.rds", seed, scenario_slug))
+  )
 
-NCORES <- future::availableCores()
+todo <- tasks |>
+  filter(!file.exists(cache_file))
 
-future::plan(
-  future::multisession, 
-  workers = min(NCORES - 2L, nrow(tasks))
-)
-tictoc::tic()
-out_df <- furrr::future_pmap_dfr(
-  tasks,
-  function(seed, scen_i) {
-    out <- do.call(sim_fit_and_index, c(sc[[scen_i]], .seed = seed))
-    out$label <- names(sc)[scen_i]
-    out
-  },
-  .options = furrr::furrr_options(seed = TRUE, scheduling = 1)
-)
-tictoc::toc()
-future::plan(future::sequential)
+if (nrow(todo) > 0L) {
+  NCORES <- future::availableCores()
+  workers <- max(1L, min(NCORES - 2L, nrow(todo)))
 
+  future::plan(
+    future::multisession,
+    workers = workers
+  )
+  tictoc::tic()
+  furrr::future_pwalk(
+    todo,
+    function(seed, scen_i, scenario_slug, scenario_label, cache_file) {
+      out <- do.call(sim_fit_and_index, c(sc[[scen_i]], .seed = seed))
+      out$label <- scenario_label
+      saveRDS(out, cache_file)
+    },
+    .options = furrr::furrr_options(seed = TRUE, scheduling = 1)
+  )
+  tictoc::toc()
+  future::plan(future::sequential)
+}
+
+if (any(!file.exists(tasks$cache_file))) {
+  stop("Some cache files were not created.")
+}
+
+out_df <- purrr::map_dfr(tasks$cache_file, readRDS)
 out_df2 <- left_join(out_df, lu, by = "label")
-dir.create("data-generated", showWarnings = FALSE)
-saveRDS(out_df2, "data-generated/sawtooth-sim-apr20.rds")
-
+saveRDS(out_df2, output_file)
