@@ -70,7 +70,7 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 # print(g)
-ggsave("figs/saw-tooth-scenarios-2026-04-22-seed3.pdf", width = 24, height = 29)
+ggsave("figs/saw-tooth-scenarios-2026-04-24-seed3.pdf", width = 24, height = 29)
 
 # a minimal version for the main text:
 seed_to_plot <- 1
@@ -112,7 +112,7 @@ out_df |>
   coord_cartesian(ylim = c(10, 2000)) +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 
-ggsave("figs/example-indices-simulated-2026-04-22.pdf", width = 7.5, height = 6.5)
+ggsave("figs/example-indices-simulated-2026-04-24.pdf", width = 7.5, height = 6.5)
 
 
 # Look at one point in space... -------------------------------------------
@@ -164,7 +164,7 @@ out_df |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
-ggsave("figs/dot-plot-metrics-2026-04-22.pdf", width = 10, height = 4)
+ggsave("figs/dot-plot-metrics-2026-04-24.pdf", width = 10, height = 4)
 
 # ---------------------
 # get at distribution
@@ -213,7 +213,7 @@ g <- temp |>
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
 g
-ggsave("figs/saw-tooth-metrics-all-2026-04-22.pdf", width = 7, height = 35)
+ggsave("figs/saw-tooth-metrics-all-2026-04-24.pdf", width = 7, height = 35)
 
 # ---------------------------------------------------------------------
 # together in one set of panels?
@@ -242,7 +242,7 @@ g <- temp |>
   ylab("Metric value") +
   coord_flip()
 g
-ggsave("figs/saw-tooth-metrics-condensed-2026-04-22.pdf", width = 7, height = 4)
+ggsave("figs/saw-tooth-metrics-condensed-2026-04-24.pdf", width = 7, height = 4)
 
 # ----------------------
 
@@ -271,7 +271,7 @@ temp |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey95"), axis.title.y.left = element_blank()) +
   xlab("Seesaw metric")
-ggsave("figs/saw-tooth-bad-iid-2026-04-22.pdf", width = 4.2, height = 4.5)
+ggsave("figs/saw-tooth-bad-iid-2026-04-24.pdf", width = 4.2, height = 4.5)
 
 # converence?
 
@@ -300,7 +300,7 @@ ggplot(conv, aes(convergence_rate_pct, forcats::fct_reorder(model, convergence_r
     x = "Convergence rate across\nseed \u00d7 scenario",
     y = "Model"
   )
-ggsave("figs/convergence-by-model-2026-04-21.pdf", width = 4.5, height = 5)
+ggsave("figs/convergence-by-model-2026-04-24.pdf", width = 4.5, height = 5)
 
 
 # Figures
