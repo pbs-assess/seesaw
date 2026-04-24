@@ -96,7 +96,7 @@ cache_dir <- "data-generated/sawtooth-sim-apr20-cache"
 dir.create("data-generated", showWarnings = FALSE)
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 
-seeds <- seq_len(1)
+seeds <- seq_len(20)
 scenario_slugs <- make.unique(vapply(names(sc), sanitize_scenario_name, character(1)), sep = "-dup-")
 tasks <- tidyr::crossing(
   seed = seeds,

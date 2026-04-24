@@ -63,6 +63,7 @@ sanity(fit)
 
 .range <- b$estimate[b$term == "range"]
 diff(range(grid$Y)) / .range
+diff(range(grid$X)) / .range
 
 dy <- group_by(d, year) |>
   summarise(biennial_region = factor(biennial_region[1]))

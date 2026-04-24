@@ -1,27 +1,56 @@
+library(dplyr)
+library(ggplot2)
+source("analysis/estimation-scenarios.R")
+source("analysis/simulation-scenarios.R")
 out_df <- readRDS("data-generated/sawtooth-sim-apr20.rds")
+out_df <- filter(out_df, !grepl("s\\(year", model))
+out_df <- filter(out_df, !grepl("year_pair", model))
+out_df <- filter(out_df, !grepl("50\\%", label))
+
+model_meta <- dplyr::bind_rows(lapply(build_model_specs(), function(x) {
+  data.frame(model = x$name, model_category = x$category, order = x$order,
+    stringsAsFactors = FALSE)
+}))
+model_levels <- model_meta |> dplyr::arrange(order) |> dplyr::pull(model)
+label_levels <- purrr::map_chr(sc, "label") |> setdiff("empty")
+
+wrap_label <- function(x) {
+  x <- gsub("obs", "\\\nobs", x)
+  x <- gsub("black", "\\\nblack", x)
+  x <- gsub("mixture", "\\\nmixture", x)
+  gsub("\\(", "\\\n\\(", x)
+}
+
+label_levels_wrapped <- wrap_label(label_levels)
+out_df <- out_df |>
+  dplyr::left_join(dplyr::select(model_meta, model, model_category), by = "model") |>
+  dplyr::mutate(
+    model = factor(model, levels = model_levels),
+    label = factor(label, levels = label_levels)
+  )
 
 # out_df$label <- forcats::fct_inorder(out_df$label)
 
 cols <- RColorBrewer::brewer.pal(3L, "Set2")
 names(cols) <- c("north", "south", "both")
 
-seed_to_plot <- 1
+seed_to_plot <- 3
 actual <- select(out_df, label, year, total, seed, sampled_region) |>
   filter(seed == seed_to_plot) |>
   distinct()
-actual2 <- mutate(actual, label = gsub("obs", "\\\nobs", label)) |>
-  mutate(label = gsub("black", "\\\nblack", label)) |>
-  mutate(label = gsub("mixture", "\\\nmixture", label)) |>
-  mutate(label = gsub("\\(", "\\\n\\(", label))
+actual2 <- mutate(actual,
+  label = factor(wrap_label(as.character(label)),
+    levels = label_levels_wrapped
+  )
+)
 
 g <- out_df |>
   filter(seed == seed_to_plot) |>
   mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
-  mutate(type_facet = gsub(",\\s*", ",\n", type)) |>
-  mutate(label = gsub("obs", "\\\nobs", label)) |>
-  mutate(label = gsub("black", "\\\nblack", label)) |>
-  mutate(label = gsub("mixture", "\\\nmixture", label)) |>
-  mutate(label = gsub("\\(", "\\\n\\(", label)) |>
+  mutate(type_facet = forcats::fct_relabel(model, ~gsub(",\\s*", ",\n", .x))) |>
+  mutate(label = factor(wrap_label(as.character(label)),
+    levels = label_levels_wrapped
+  )) |>
   ggplot(aes(year, est, ymin = lwr, ymax = upr)) +
   ggsidekick::theme_sleek() +
   geom_pointrange(aes(colour = sampled_region)) +
@@ -31,7 +60,7 @@ g <- out_df |>
     data = actual2, mapping = aes(year, total),
     inherit.aes = FALSE, lty = 2
   ) +
-  facet_grid(forcats::fct_inorder(label) ~ type_facet,
+  facet_grid(label ~ type_facet,
     scales = "free_y"
   ) +
   ylab("Abundance estimate") +
@@ -41,30 +70,28 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 # print(g)
-ggsave("figs/saw-tooth-scenarios-2026-04-21.pdf", width = 28, height = 23)
+ggsave("figs/saw-tooth-scenarios-2026-04-22-seed3.pdf", width = 24, height = 29)
 
 # a minimal version for the main text:
-seed_to_plot <- 3
+seed_to_plot <- 1
 actual <- select(out_df, label, year, total, seed, sampled_region) |>
   filter(seed == seed_to_plot) |>
   distinct()
-actual2 <- mutate(actual, label = gsub("obs", "\\\nobs", label)) |>
-  mutate(label = gsub("black", "\\\nblack", label)) |>
-  mutate(label = gsub("mixture", "\\\nmixture", label)) |>
-  mutate(label = gsub("\\(", "\\\n\\(", label))
+actual2 <- mutate(actual, label = as.character(label))
 
 labels <- c("Base", "No gap", "Large gap", "High range", "Low range")
+labels_wrapped <- wrap_label(labels)
 
-.actual2 <- dplyr::filter(actual2, label %in% labels)
+.actual2 <- dplyr::filter(actual2, label %in% labels) |>
+  dplyr::mutate(label = factor(wrap_label(label), levels = labels_wrapped))
 SCALER <- 1e4
 out_df |>
   filter(seed == seed_to_plot) |>
   filter(label %in% labels, with_depth == "covariate = FALSE", model %in% c("RW RF", "IID RF, factor(year)", "IID RF, RW year")) |>
   mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
-  mutate(label = gsub("obs", "\\\nobs", label)) |>
-  mutate(label = gsub("black", "\\\nblack", label)) |>
-  mutate(label = gsub("mixture", "\\\nmixture", label)) |>
-  mutate(label = gsub("\\(", "\\\n\\(", label)) |>
+  mutate(label = factor(wrap_label(as.character(label)),
+    levels = labels_wrapped
+  )) |>
   ggplot(aes(year, est/SCALER, ymin = lwr/SCALER, ymax = upr/SCALER)) +
   ggsidekick::theme_sleek() +
   geom_pointrange(aes(colour = sampled_region)) +
@@ -74,7 +101,7 @@ out_df |>
     data = .actual2, mapping = aes(year, total/SCALER),
     inherit.aes = FALSE, lty = 2
   ) +
-  facet_grid(forcats::fct_inorder(label) ~ type,
+  facet_grid(label ~ model,
     scales = "free_y"
   ) +
   ylab("Abundance estimate") +
@@ -82,10 +109,10 @@ out_df |>
   labs(colour = "Sampled region") +
   scale_colour_manual(values = cols[c(2, 1, 3)]) +
   scale_y_log10() +
-  coord_cartesian(ylim = c(10, 1000)) +
+  coord_cartesian(ylim = c(10, 2000)) +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 
-ggsave("figs/example-indices-simulated-2026-04-21.pdf", width = 7.5, height = 6.5)
+ggsave("figs/example-indices-simulated-2026-04-22.pdf", width = 7.5, height = 6.5)
 
 
 # Look at one point in space... -------------------------------------------
@@ -137,7 +164,7 @@ out_df |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
-ggsave("figs/dot-plot-metrics-2026-04-21.pdf", width = 10, height = 4)
+ggsave("figs/dot-plot-metrics-2026-04-22.pdf", width = 10, height = 4)
 
 # ---------------------
 # get at distribution
@@ -172,19 +199,21 @@ saw_tooth_ind <- temp |> filter(metric == "seesaw_index") |>
 g <- temp |>
   left_join(saw_tooth_ind) |>
   filter(metric != "mre") |>
-  mutate(label = gsub("obs", "\\\nobs", label)) |>
-  mutate(label = gsub("black", "\\\nblack", label)) |>
-  mutate(label = gsub("mixture", "\\\nmixture", label)) |>
-  mutate(label = gsub("\\(", "\\\n\\(", label)) |>
+  mutate(label = forcats::fct_relabel(label, \(x) {
+    x <- gsub("obs", "\\\nobs", x)
+    x <- gsub("black", "\\\nblack", x)
+    x <- gsub("mixture", "\\\nmixture", x)
+    gsub("\\(", "\\\n\\(", x)
+  })) |>
   ggplot(aes(med, forcats::fct_reorder(model, med_st_index))) +
   geom_point(pch = 21) +
   geom_linerange(aes(xmin = lwr, xmax = upr)) +
-  facet_grid(forcats::fct_inorder(label)~metric, scales = "free_x") +
+  facet_grid(label~metric, scales = "free_x") +
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
 g
-ggsave("figs/saw-tooth-metrics-all-2026-04-21.pdf", width = 7, height = 45)
+ggsave("figs/saw-tooth-metrics-all-2026-04-22.pdf", width = 7, height = 35)
 
 # ---------------------------------------------------------------------
 # together in one set of panels?
@@ -213,7 +242,7 @@ g <- temp |>
   ylab("Metric value") +
   coord_flip()
 g
-ggsave("figs/saw-tooth-metrics-condensed-2026-04-21.pdf", width = 7, height = 4)
+ggsave("figs/saw-tooth-metrics-condensed-2026-04-22.pdf", width = 7, height = 4)
 
 # ----------------------
 
@@ -238,11 +267,11 @@ temp |>
   geom_vline(xintercept = temp$med[temp$model == "IID" & temp$label == "Base"], lty = 2, colour = "grey70") +
   geom_linerange(aes(xmin = lwr, xmax = upr)) +
   geom_point(pch = 21, size = 1.8) +
-  # facet_wrap(~forcats::fct_inorder(label), scales = "free_x") +
+  # facet_wrap(~label, scales = "free_x") +
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey95"), axis.title.y.left = element_blank()) +
   xlab("Seesaw metric")
-ggsave("figs/saw-tooth-bad-iid-2026-04-21.pdf", width = 4.2, height = 4.5)
+ggsave("figs/saw-tooth-bad-iid-2026-04-22.pdf", width = 4.2, height = 4.5)
 
 # converence?
 

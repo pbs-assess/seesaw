@@ -20,7 +20,7 @@ if (CASE == "quillback inside") {
   d <- filter(d, survey_abbrev %in% c("HBLL INS N", "HBLL INS S"))
   # simplify, remove N in 2021 (was N + S)
   d <- filter(d, !(year == 2021 & survey_abbrev %in% "HBLL INS N"))
-  d <- mutate(d, response = catch_count, log_effort = log(hook_count))
+  d <- mutate(d, observed = catch_count, log_effort = log(hook_count))
   d$biennial_region <- as.integer(as.factor(d$survey_abbrev))
   family <- sdmTMB::nbinom2()
 }
@@ -55,7 +55,7 @@ if (CASE == "lingcod synoptic") {
   table(d$year, d$biennial_region)
 
   d <- mutate(d, observed = density_kgkm2, log_effort = log(area_swept))
-  family <- tweedi::e()
+  family <- tweedie()
 }
 
 if (SURVEY == "synoptic") {
@@ -65,7 +65,7 @@ if (SURVEY == "synoptic") {
 # fit initial models --------------------------------------------
 
 d <- add_utm_columns(d)
-mesh <- make_mesh(nd, c("X", "Y"), cutoff = 8)
+mesh <- make_mesh(d, c("X", "Y"), cutoff = 8)
 plot(mesh)
 
 fit <- sdmTMB(
