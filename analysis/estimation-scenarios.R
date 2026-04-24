@@ -59,7 +59,7 @@ build_model_specs <- function() {
         time_varying = ~1,
         time_varying_type = "rw",
         spatiotemporal = "ar1",
-        priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5))
+        priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5), ar1_rho = normal(0, 1))
       )
     ),
     list(
@@ -201,4 +201,9 @@ if (FALSE) {
   x <- seq(0.001, 1, length.out = 300)
   plot(x, dgamma_cv(x, 0.3, 0.5), type = "l")
   abline(v = 0.3)
+
+  x <- seq(-0.999, 0.999, length.out = 300)
+  # plot(x, dnorm(x, 0, 2), type = "l", ylim = c(0, 0.2))
+  plot(x, dnorm(x, 0, 1), type = "l", ylim = c(0, 0.42))
+  abline(v = 0)
 }
