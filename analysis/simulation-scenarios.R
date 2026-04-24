@@ -100,12 +100,12 @@ i <- i + 1
 
 sc[[i]]$label <- "Low sigma E"
 sc[[i]]$category <- "Spatiotemporal SD"
-sc[[i]]$sigma_O <- 0.5
+sc[[i]]$sigma_E <- 0.5
 i <- i + 1
 
 sc[[i]]$label <- "High sigma E"
 sc[[i]]$category <- "Spatiotemporal SD"
-sc[[i]]$sigma_O <- 2.5
+sc[[i]]$sigma_E <- 2.5
 i <- i + 1
 
 # Temporal process -----------------------------------------------------------
