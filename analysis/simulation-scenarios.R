@@ -20,7 +20,7 @@ base <- list(
 )
 
 # N here should match number of scenarios below:
-sc <- purrr::map(seq_len(20L), ~base)
+sc <- purrr::map(seq_len(22L), ~base)
 
 i <- 1
 
