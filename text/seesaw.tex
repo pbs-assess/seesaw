@@ -128,17 +128,18 @@ Biennial survey designs can induce seesaw effects in expanded-area abundance ind
 
 \section*{Abstract}
 
-Indices of abundance derived from scientific surveys underpin stock assessment, conservation monitoring, and ecosystem evaluation. 
-In practice, however, survey spatial coverage often changes over time.
-Some surveys use rotating or biennial designs to efficiently allocate limited sampling effort, others lose or gain large spatial components due to budgetary or logistical constraints, and there is growing interest in combining surveys across jurisdictional boundaries to assess whole-stock status or climate-driven range shifts. 
-Despite these issues, analysts often seek an index of abundance that represents the full survey or a stock-domain across multiple surveys.
+Indices of abundance derived from scientific surveys underpin stock assessment, conservation monitoring, and ecosystem evaluation.
+Some surveys use rotating or biennial sampling designs to efficiently allocate limited sampling effort each year but cover a larger survey domain.
+Furthermore, there is growing interest in combining surveys to assess whole-stock status or climate-driven range shifts, and this too can induce rotating survey coverage unless all surveys are conducted every year.
+Despite these scenarios, analysts often seek an index of abundance that represents the full survey or a stock-domain across multiple surveys.
 Model-based index standardization over an expanded spatial domain offers a potential solution.
-However, we show here that in practice this can produce unrealistic interannual oscillations, which we term ``seesaw'' effects.
-Using a combination of simulation analyses and applied case studies, we diagnose the mechanisms underlying these oscillations and evaluate potential solutions. 
-We show that the problem arises from models confusing spatial for temporal variation in density.
+However, we show here that applying commonly used index standardization models with independent year effects can produce unrealistic interannual oscillations, which we term ``seesaw'' effects.
+Using a combination of simulation analyses and applied case studies, we diagnose the mechanisms underlying these oscillations, the scenarios that accentuate or weaken their strength, and what spatiotemporal model configurations can alleviate the symptoms while maintaining desirable statistical properties of the resulting area-weighted index.
+Fundamentally, the issue arises when models confuse spatial variation in density for temporal variation.
+We show that the problem arises due to the union of a differential in species density across survey subregions, short spatial correlation range relative to the survey domain size, and insufficient penalization of temporal variability.
 We demonstrate that appropriately penalizing temporal or spatiotemporal variability---via autoregressive correlation structures---can reduce or eliminate seesaw effects.
-We provide practical guidance for diagnosing these artifacts in real data and for assessing whether model-based solutions are adequately tuned.
-Our approach enables constructing expanded-area abundance indices that are suitable for stock assessment and related population monitoring applications.
+We provide practical guidance for diagnosing these artifacts in real data and for assessing whether model-based solutions are propertly tuned.
+Our approach enables constructing expanded-area abundance indices from existing biennial and rotating survey designs that are suitable for population monitoring applications although we emphasize that such rotating survey designs are suboptimal if the goal is characterization of expanded-area temporal trends.
 
 \section*{Introduction}
 
