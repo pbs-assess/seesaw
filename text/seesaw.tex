@@ -94,6 +94,7 @@
 \date{}
 
 \title{
+Improving abundance indices arising from biennial and rotating survey designs\\ \smallskip
 Correcting seesaw effects in abundance indices arising from biennial and rotating survey designs\\ \smallskip
 Avoiding seesaw effects in model-based abundance indices under changing survey spatial coverage\\ \smallskip
 Diagnosing and correcting seesaw effects in expanded-area, model-based abundance indices\\ \smallskip
@@ -113,38 +114,53 @@ Diagnosing and correcting seesaw effects in expanded-area, model-based abundance
 
 % \doublespacing
 \begin{document}
-\begin{spacing}{1.1}
+\begin{spacing}{1.5}
 \maketitle
 
-Target journals: ICES JMS, CJFAS, Fisheries Research, Ecological Applications
+Target journals: CJFAS, ICES JMS, Fisheries Research, Ecological Applications
 
 \clearpage
 
 % \linenumbers
 
-\section*{25 word summary}
+% \section*{25 word summary}
 
-Biennial survey designs can induce seesaw effects in expanded-area abundance indices when models confound spatial and temporal variation. Autoregressive temporal or spatiotemporal structures mitigate this.
+% Biennial survey designs can induce seesaw effects in expanded-area abundance indices when models confound spatial and temporal variation. Autoregressive temporal or spatiotemporal structures mitigate this.
 
 \section*{Abstract}
 
-Scientific surveys often use rotating or biennial sampling designs to efficiently allocate limited sampling effort each year but cover a larger survey domain.
-Furthermore, there is growing interest in combining surveys to assess whole-stock status or climate-driven range shifts, which can also induce rotating survey coverage unless all surveys are conducted every year.
-In these cases, analysts often seek an index of abundance that represents the full survey or a fish stock's domain across multiple surveys.
-Model-based index standardization over an expanded spatial domain offers a potential solution.
-However, we show here that applying commonly used index standardization models with independent year effects can produce unrealistic interannual oscillations, which we term ``seesaw'' effects.
+Scientific surveys often use rotating or biennial sampling designs to cover a larger spatial domain under limited annual effort.
+Surveys conducted by neighbouring jurisdictions on non-annual cycles can induce similar rotating coverage.
+In these cases, analysts often seek an index of abundance that represents the full survey or a fish stock's domain across multiple surveys to assess whole-stock status or climate-drive range shifts.
+Geostatistical index standardization offers a natural solution by predicting density in unsampled locations and years.
+However, applying commonly used index standardization models with independent year effects can produce spurious interannual oscillations, which we term ``seesaw'' effects.
 Here, we diagnose the mechanisms underlying seesaw effects, evaluate conditions that modify their strength, and determine what spatiotemporal model configurations can alleviate the problem.
-Fundamentally, the issue arises when models confuse spatial variation in density for temporal variation---strong density gradients in space, short spatial correlation range, and spatial gaps between survey coverage all accentuate the issue.
-We demonstrate with simulated data and across four case studies that appropriately penalizing temporal or spatiotemporal variability via autoregressive correlation structures can reduce or eliminate seesaw effects.
-We provide practical guidance for diagnosing these artifacts in real data and for assessing whether model-based solutions are properly tuned.
-Our approach enables constructing expanded-area abundance indices from biennial and rotating survey designs that are suitable for population monitoring applications.
+The issue arises when models mistake spatial variation in density for temporal variation---strong density gradients in space, short spatial correlation range, and spatial gaps between survey coverage accentuate the issue.
+We demonstrate with simulated data and across four case studies that penalizing temporal or spatiotemporal variability via autoregressive correlation structures can reduce or eliminate seesaw effects.
+Our approach enables constructing abundance indices from biennial and rotating survey designs that are suitable for population monitoring applications.
 However, we emphasize that such rotating survey designs are suboptimal if the goal is characterization of expanded-area temporal trends.
 
 \section*{Introduction}
 
+Paragraph 1: Surveys use rotating or biennial sampling designs but analysts increasingly seek to combine them to analyze whole stocks for assessment or range shifts
+
+Paragraph 2: Geostatistical models with area-weighted standardization offer a natural solution since they can infer density in missing locations and time; classic formulation is independent years...
+
+Paragraph 3: Applying this classic model to rotating or biennial sampling designs can have surprising results
+
+Paragraph 4: Here, we diagnose the mechanisms underlying seesaw effects, evaluate conditions that modify their strength, and determine what spatiotemporal model configurations can alleviate the problem
+
 \section*{Methods}
 
+\subsection{Simulation testing}
+
+\subsection{Case studies}
+
 \section*{Results}
+
+\subsection{Simulation testing}
+
+\subsection{Case studies}
 
 % Figures
 % - Spatial setup example (~4 blocks underlying and 4 blocks observed?)
@@ -189,7 +205,6 @@ However, we emphasize that such rotating survey designs are suboptimal if the go
 % \subsection*{Does having a year with complete coverage important?}
 
 \section*{Discussion}
-
 
 % Results/Discussion:
 % Random walk random field is the best ones.
