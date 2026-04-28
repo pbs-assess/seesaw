@@ -1,5 +1,6 @@
 library(dplyr)
 library(ggplot2)
+library(sdmTMB)
 source("analysis/estimation-scenarios.R")
 source("analysis/simulation-scenarios.R")
 out_df <- readRDS("data-generated/sawtooth-sim-apr20.rds")
@@ -34,7 +35,7 @@ out_df <- out_df |>
 cols <- RColorBrewer::brewer.pal(3L, "Set2")
 names(cols) <- c("north", "south", "both")
 
-seed_to_plot <- 3
+seed_to_plot <- 1
 actual <- select(out_df, label, year, total, seed, sampled_region) |>
   filter(seed == seed_to_plot) |>
   distinct()
@@ -70,10 +71,10 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 # print(g)
-ggsave("figs/saw-tooth-scenarios-2026-04-24-seed3.pdf", width = 24, height = 29)
+ggsave("figs/saw-tooth-scenarios-2026-04-28-seed1.pdf", width = 24, height = 32)
 
 # a minimal version for the main text:
-seed_to_plot <- 1
+seed_to_plot <- 3
 actual <- select(out_df, label, year, total, seed, sampled_region) |>
   filter(seed == seed_to_plot) |>
   distinct()
@@ -87,7 +88,7 @@ labels_wrapped <- wrap_label(labels)
 SCALER <- 1e4
 out_df |>
   filter(seed == seed_to_plot) |>
-  filter(label %in% labels, with_depth == "covariate = FALSE", model %in% c("RW RF", "IID RF, factor(year)", "IID RF, RW year")) |>
+  filter(label %in% labels, with_depth == "covariate = FALSE", model %in% c("RW RF", "IID RF, factor(year)", "IID RF, RW year", "AR(1) RF")) |>
   mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
   mutate(label = factor(wrap_label(as.character(label)),
     levels = labels_wrapped
@@ -112,7 +113,7 @@ out_df |>
   coord_cartesian(ylim = c(10, 2000)) +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 
-ggsave("figs/example-indices-simulated-2026-04-24.pdf", width = 7.5, height = 6.5)
+ggsave("figs/example-indices-simulated-2026-04-28.pdf", width = 7.5, height = 6.5)
 
 
 # Look at one point in space... -------------------------------------------
@@ -141,30 +142,65 @@ ggsave("figs/example-indices-simulated-2026-04-24.pdf", width = 7.5, height = 6.
 
 # What about MRE, RMSE, see-saw, coverage etc. ? --------------------------
 
+glimpse(out_df)
+table(out_df$sampled_region)
+
 out_df |>
-  group_by(model) |>
+  mutate(lwr_0.25 = exp(log_est - qnorm(0.75) * se)) |> 
+  mutate(upr_0.75 = exp(log_est + qnorm(0.75) * se)) |> 
+  mutate(odd_year = year %in% seq(1, 99, 2)) |> 
+  group_by(seed, model) |>
   mutate(log_residual = log(total) - log(est)) |>
   summarise(
-    seesaw_index = abs(mean(log_residual[sampled_region == "north"]) -
-      mean(log_residual[sampled_region == "south"])),
+    seesaw_index = abs(mean(log_residual[odd_year]) -
+      mean(log_residual[!odd_year])),
     mre = mean(log_residual),
     rmse = sqrt(mean(log_residual^2)),
     mean_se = mean(se),
-    coverage = mean(total < upr & total > lwr)
+    # coverage = mean(total < upr & total > lwr)
+    coverage = mean(total < upr_0.75 & total > lwr_0.25)
   ) |>
-  arrange(seesaw_index, rmse) |>
-  mutate(model = forcats::fct_reorder(model, rev(seesaw_index))) |>
-  tidyr::pivot_longer(cols = -model, names_to = "metric") |>
+  group_by(model) |>
+  mutate(
+    mean_seesaw_index = mean(seesaw_index),
+    mean_rmse = mean(rmse)
+  ) |>
+  ungroup() |>
+  arrange(mean_seesaw_index, mean_rmse) |>
+  mutate(model = factor(model, levels = unique(model))) |>
+  tidyr::pivot_longer(
+    cols = -c(seed, model, mean_seesaw_index, mean_rmse),
+    names_to = "metric"
+  ) |>
+  filter(metric != "mre") |> 
+  mutate(metric = replace_values(metric,
+    "seesaw_index" ~ "Seesaw index",
+    "rmse" ~ "RMSE",
+    "mean_se" ~ "Mean SE",
+    "coverage" ~ "50% CI Coverage"
+  )) |>
   mutate(metric = factor(metric,
-    levels = c("seesaw_index", "rmse", "mre", "mean_se", "coverage")
+    levels = c("Seesaw index", "RMSE", "Mean SE", "50% CI Coverage")
   )) |>
   ggplot(aes(value, model)) +
-  geom_point(pch = 21) +
+  geom_vline(
+    data = data.frame(
+      metric = factor("50% CI Coverage",
+        levels = c("Seesaw index", "RMSE", "Mean SE", "50% CI Coverage")
+      ),
+      value = 0.5
+    ),
+    aes(xintercept = value),
+    lty = 2,
+    colour = "grey85"
+  ) +
+  geom_violin(fill = "grey80", colour = "grey30", lwd = 0.4) +
+  stat_summary(fun = mean, geom = "point", pch = 21, fill = "white") +
   facet_wrap(~metric, scales = "free_x", nrow = 1L) +
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
-ggsave("figs/dot-plot-metrics-2026-04-24.pdf", width = 10, height = 4)
+ggsave("figs/violin-plot-metrics-2026-04-28.pdf", width = 10, height = 4)
 
 # ---------------------
 # get at distribution
@@ -213,7 +249,7 @@ g <- temp |>
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
 g
-ggsave("figs/saw-tooth-metrics-all-2026-04-24.pdf", width = 7, height = 35)
+ggsave("figs/saw-tooth-metrics-all-2026-04-28.pdf", width = 7, height = 35)
 
 # ---------------------------------------------------------------------
 # together in one set of panels?
@@ -242,7 +278,7 @@ g <- temp |>
   ylab("Metric value") +
   coord_flip()
 g
-ggsave("figs/saw-tooth-metrics-condensed-2026-04-24.pdf", width = 7, height = 4)
+ggsave("figs/saw-tooth-metrics-condensed-2026-04-28.pdf", width = 7, height = 4)
 
 # ----------------------
 
@@ -262,18 +298,19 @@ temp <- out_df |>
   ungroup() |>
   filter(model == "IID RF, factor(year)")
 
+vert_line <- filter(temp, label == "Base") |> pull(med)
 temp |>
   ggplot(aes(med, forcats::fct_reorder(label, med))) +
-  geom_vline(xintercept = temp$med[temp$model == "IID" & temp$label == "Base"], lty = 2, colour = "grey70") +
+  geom_vline(xintercept = vert_line, lty = 2, colour = "grey70") +
   geom_linerange(aes(xmin = lwr, xmax = upr)) +
-  geom_point(pch = 21, size = 1.8) +
+  geom_point(pch = 21, size = 1.8, fill = "white") +
   # facet_wrap(~label, scales = "free_x") +
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey95"), axis.title.y.left = element_blank()) +
   xlab("Seesaw metric")
-ggsave("figs/saw-tooth-bad-iid-2026-04-24.pdf", width = 4.2, height = 4.5)
+ggsave("figs/saw-tooth-bad-iid-2026-04-28.pdf", width = 4.4, height = 4.5)
 
-# converence?
+# convergence?
 
 total_tasks <- out_df |>
   distinct(seed, label) |>
@@ -300,7 +337,7 @@ ggplot(conv, aes(convergence_rate_pct, forcats::fct_reorder(model, convergence_r
     x = "Convergence rate across\nseed \u00d7 scenario",
     y = "Model"
   )
-ggsave("figs/convergence-by-model-2026-04-24.pdf", width = 4.5, height = 5)
+ggsave("figs/convergence-by-model-2026-04-28.pdf", width = 4.5, height = 5)
 
 
 # Figures

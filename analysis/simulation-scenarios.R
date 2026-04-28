@@ -4,16 +4,16 @@ base <- list(
   n_year = n_year,
   label = "empty", # to be filled
   gap_size = 0.05,
-  sim_coefs = c(7, 0), # linear + quadratic effects on Y coordinate
-  phi = 15,
+  sim_coefs = c(10, 0), # linear + quadratic effects on Y coordinate
+  phi = 10,
   obs_sampled_size = 200L,
   obs_yrs = list(
     north_yrs = seq(1, n_year - 1, 2), south_yrs = c(seq(2, n_year, 2))
   ),
   region_cutoff = 0.5,
   range = 0.1,
-  sigma_O = 1.5,
-  sigma_E = 1,
+  sigma_O = 2,
+  sigma_E = 1.5,
   year_arima.sim = list(ar = 0.5),
   year_marginal_sd = 0.3,
   sample_before_split = FALSE
@@ -95,7 +95,7 @@ i <- i + 1
 
 sc[[i]]$label <- "High sigma O"
 sc[[i]]$category <- "Spatial SD"
-sc[[i]]$sigma_O <- 2.5
+sc[[i]]$sigma_O <- 3
 i <- i + 1
 
 sc[[i]]$label <- "Low sigma E"
@@ -105,7 +105,7 @@ i <- i + 1
 
 sc[[i]]$label <- "High sigma E"
 sc[[i]]$category <- "Spatiotemporal SD"
-sc[[i]]$sigma_E <- 2.5
+sc[[i]]$sigma_E <- 3
 i <- i + 1
 
 # Temporal process -----------------------------------------------------------

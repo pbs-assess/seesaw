@@ -51,7 +51,7 @@ sc <- purrr::map(sc, ~ {
 
 if (FALSE) {
   tictoc::tic()
-  out20 <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = FALSE))
+  out20 <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 3, make_plots = FALSE))
   tictoc::toc()
 
   # testing first:
