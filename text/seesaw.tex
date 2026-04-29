@@ -156,36 +156,43 @@ Paragraph 4: Here, we diagnose the mechanisms underlying seesaw effects, evaluat
 
 We conducted a simulation experiment to identify the conditions that induce, strengthen, or weaken seesaw effects, and to evaluate how a range of spatiotemporal model configurations perform across those conditions.
 
-We structured the simulation around a base case (Table S), with individual variables then adjusted upward and downward from that baseline (Table S). 
+We structured the simulation around a base case (Table SX), with individual variables then adjusted upward and downward from that baseline (Table SY). 
 For example, the base case included 200 observations per year; we also tested scenarios in which this number was doubled and halved. 
-Variables in the base case were chosen roughly to reflect typical conditions in groundfish trawl survey datasets often fitted on the west coast of Canada (e.g. SYN REF).
+Parameters in the base case were chosen to reflect typical conditions in groundfish trawl survey datasets often fitted on the west coast of Canada (e.g. SYN REF).
 
-Our base case simulation had a strong linear gradient in density in log space from north to south, 12 year effects that followed an AR(1) process, a spatial GMRF, and independent spatiotemporal GMRFs each year. 
-The spatial correlation range was shared between the spatial and spatiotemporal GMRFs, but each had their own variances.
+Our base case simulation had a strong linear gradient in density in log space from north to south, a 12-year time series of annual effects that followed an AR(1) process, and spatial and spatiotemporal GMRFs representing additional spatially correlated latent effects.
+Specifically, it had a spatial GMRF that was constant through time and spatiotemporal GMRFs that were drawn independently each year but with a shared variance among years (Table XX). 
+The spatial correlation range was shared between the spatial and spatiotemporal GMRFs, but the spatial and spatiotemporal components had separate variances.
 We simulated a true underlying density on a 100 $\times$ 100 cell grid covering x and y coordinates of 0--1.
-From the true grid of density values, we calculated the true index as the sum of the density across the grid.
-We repeated these simulations for 100 iterations, which we found were sufficient to achieve stable results.
+From the true grid of density values, we calculated the area-weighted biomass index by multiplying each grid-cell density by the constant cell area and summing across grid cells.
+We repeated each simulation scenario for 100 iterations, which was sufficient to achieve stable results.
 
-Given the true density grid, we ``observed'' a given number of samples for a given survey year from the grid and added Tweedie observation error of a given magnitude.
+Given the true density grid, we randomly selected sampling locations from the scenario-specific sampling domain in each survey year and observed the corresponding grid-cell densities with added Tweedie observation error.
 We implemented several biennial rotating survey designs, focusing on a north-south sampling scheme for simplicity.
 In the biennial scenarios, samples were taken only in the north in odd years and only in the south in even years. 
 We compared designs with and without a gap between the north and south regions, and benchmarked these against a reference scenario in which the full domain was sampled every year. 
-In one scenario, we sampled only the last year with full domain coverage to evaluate whether a single year of full coverage could solve the seesaw effect.
+In one scenario, we sampled only the last year with full domain coverage to evaluate whether a single year of full coverage could mitigate the seesaw effect.
 
 We fit a sequence of estimation models to the observed values (Table X).
-These ranged from the classic independent year effects with spatial fields and IID spatiotemporal fields to models with autoregressive temporal and/or spatiotemporal structures (Table X).
+These ranged from the standard independent year effects with spatial fields and IID spatiotemporal fields to models with autoregressive temporal and/or spatiotemporal structures (Table X).
 Specifically, our models were combinations of spatiotemporal random walk GMRFs, spatiotemporal AR(1) GMRFs, and independent or random walk year effects.
+After fitting a model, we estimated an area-weighted biomass index for each year by predicting on the full survey grid, multiplying each prediction by the constant grid cell area, and summing across grid cells.
+We applied a generic bias correction to account for bias and skew due to the non-linear transformation of the random effects (Thorson REF).
 
-We measured several metrics with respect to the area-weighted summed density index for each scenario.
+We measured several metrics comparing the estimated and true biomass indices for each scenario.
 First, we measured a ``seesaw index'' $\psi$, which we defined as:
 \begin{equation}
 \psi = \left\lvert \overline{r}_{\text{odd}} - \overline{r}_{\text{even}} \right\rvert,
 \label{eq:seesaw}
 \end{equation}
 \noindent
-where $r_t = \log(\hat{I}_t / I_t)$ is the log-residual of the estimated index $\hat{I}_t$ in year $t$ against the true index $I_t$.
-Subscripts on $\overline{r}$ denote odd and even years, which for the biennial sampling designs considered, correspond to the years in which only the north or south region was sampled, respectively.
-We also computed the root mean square error of the log-index values as a measure of accuracy, the mean standard error as a measure or precision, and the coverage of the 50\% confidence intervals (CIs) as a measure of uncertainty calibration.
+where $r_t = \log(\hat{I}_t / I_t)$ is the log-residual of the estimated biomass index $\hat{I}_t$ in year $t$ against the true index $I_t$.
+Subscripts on $\overline{r}$ denote odd and even years, which for the biennial sampling designs considered correspond to the years in which only the north or south region was sampled, respectively.
+We calculated $\psi$ for all years, including years with full spatial sampling coverage.
+The seesaw index $\psi$ is larger when there is a strong oscillation in the biomass index between years with north vs.\ south coverage.
+Taking the absolute value ensures the metric is insensitive to which area is covered in odd vs.\ even years.
+We also computed the root mean square error of the log-index values as a measure of accuracy, the mean standard error as a measure of estimated uncertainty, and the coverage of the 50\% confidence intervals (CIs) as a measure of uncertainty calibration.
+We evaluated coverage using 50\% CIs because intermediate intervals provide greater resolution for comparing calibration among scenarios than wider intervals, whose empirical coverage can be compressed near one.
 
 \subsection*{Case studies}
 
@@ -453,4 +460,3 @@ Year of overlap (double effort) & One year surveying both regions, double the ov
 \end{figure}
 
 \end{document}
-
