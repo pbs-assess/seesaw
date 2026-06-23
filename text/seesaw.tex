@@ -10,7 +10,6 @@
 %   - Elsewhere?
 % - a table of cases where this happens already worldwide
 %
-
 % Stories/questions:
 % What's the problem?
 % How can we test it with simulated data?
@@ -162,31 +161,49 @@ Target journals: CJFAS, ICES JMS, Fisheries Research, Ecological Applications
 
 \section*{Abstract}
 
-Analysts increasingly seek to derive indices of abundance that span multiple survey domains to evaluate expanded domain whole-stock status or climate-driven range shifts.
-Sometimes the underlying survey data are not sampled across the full expanded domain each year either due to rotating sampling designs or neighbouring jurisdiction biennial sampling. 
 % Scientific surveys often use rotating or biennial sampling designs to cover a larger spatial domain under limited annual effort.
 % Surveys conducted by neighbouring jurisdictions on non-annual cycles can induce similar rotating coverage.
 % In these cases, analysts often seek an index of abundance that represents the full survey or a fish stock's domain across multiple survey programs to assess whole-stock status or climate-driven range shifts.
+
+Analysts increasingly seek to derive indices of abundance that span multiple survey domains to evaluate whole-stock status or climate-driven range shifts.
+In these situations, survey data are not always sampled across the full expanded domain each year either due to rotating sampling designs or biennial sampling by neighbouring jurisdictions. 
 Geostatistical index standardization offers a natural solution by predicting density in unsampled locations and years.
 However, applying commonly used index standardization models with independent year effects can produce spurious interannual oscillations, which we term ``seesaw'' effects.
-Here, we diagnose the mechanisms underlying seesaw effects, evaluate conditions that modify their strength, and determine which spatiotemporal model configurations alleviate the problem.
+Here, we diagnose the mechanisms underlying seesaw effects, evaluate conditions that modify their strength, and determine which spatiotemporal model configurations alleviate their effects.
 We find the issue arises when models mistake spatial variation in density for temporal variation.
 Strong density gradients in space, high spatiotemporal variance, short spatial correlation range, and spatial gaps between survey coverage accentuate the issue.
 We demonstrate with simulated data and across four case studies that penalizing temporal or spatiotemporal variability via autoregressive correlation structures can reduce or eliminate seesaw effects.
-This approach enables analysts to make better use of existing biennial and rotating-design survey data for population-monitoring applications, while clarifying the tradeoffs involved.
-Even though seesaw effects can be reduced, rotating survey designs remain suboptimal if a goal is characterizing temporal trends across an expanded spatial domain.
+The challenge remains choosing an appropriate level of penalization because excess penalization can attenuate interannual variability.
+This approach enables analysts to make better use of existing biennial and rotating-design survey data for population-monitoring applications.
+However, we emphasize that even though seesaw effects can be reduced, rotating survey designs remain suboptimal if a goal is characterizing temporal trends across an expanded spatial domain.
 
 % TODO: make a plot to check the last sentence - precision etc. for the AR(1) RF and biennial sampling as an example against the full coverage standard model!
 
 \section*{Introduction}
 
-Paragraph 1: Some surveys use rotating or biennial sampling designs but analysts increasingly seek to combine them to analyze whole stocks for assessment or range shifts
+Analysts increasingly seek to model survey data across multiple surveys in integrated ``expanded-domain'' models \citep[][]{grussImpactsDifferent2025}.
+Such an approach enables assessing relative abundance across whole fish stocks where stocks cross survey borders \citep[e.g.,][]{davidsonMysteryDisappearing2026}.
+It also enables calculating species distribution shift metrics using data from a whole species range, which is important when estimating quantities such as range edges REFs \citep{davidsonMysteryDisappearing2026}.
+However, the data underlying such integrated models are not necessarily sampled across the full expanded spatial domain every year.
+Within an agency, this can happen as a result of rotating survey designs due to logistical constraints (e.g., REF).
+Across agencies, this can occur if one or more neighbouring agencies conduct a survey on a non-annual basis, for example biennially (e.g., REF). 
 
-Paragraph 2: Geostatistical models with area-weighted standardization offer a natural solution since they can infer density in missing locations and time; classic formulation is independent years to maximize flexibility, avoid smoothing, and reduce correlation in year estimates going into stock assessments.
+Geostatistical spatiotemporal models offer a natural solution to reconciling rotating or biennially sampled survey data.
+By creating an expectation of fish density in space and time, such models can infer density across the full survey domain, thereby theoretically accounting for sampling that does not cover the full domain every year \citep{thorson2015Geostatistical}.
+A classic formulation of such a model has independent year effects and independent spatiotemporal random effects \citep{thorson2015Geostatistical}.
+This formulation maximizes interannual flexibility and reduces correlation in annual index estimates that are entered into stock assessment models.
 
-Paragraph 3: Applying this classic model to rotating or biennial sampling designs can have surprising results.
+While the properties of such independent-year spatiotemporal models applied to typical survey data are well studied, applying these models to rotating or biennial sampling designs can result in interannual oscillations in indices of abundance, which we term here ``seesaw'' effects.
+For example, the phenomenon has been observed for Yelloweye Rockfish \citep{haggarty2021yelloweyeinside} and Quillback Rockfish \citep{huynh2025quillbackoutside} in longline surveys and for Pacific Spiny Dogfish \citep{andersonPacificSpiny2026, davidsonMysteryDisappearing2026} and Lingcod (REF) in bottom trawl surveys off western Canada. 
+The effect has been observed for XX in a XX trawl survey in Norway (Figure~1).
+In a transboundary context, the effect has been observed when combining survey data along the entire western U.S.-Canada coast \citep{wardWinLose2024}.
+These seesaw effects do not make sense biologically for these relatively long-lived species---there is no reason to expect a biennial artifact in population abundance.
+One consequence of the effect is that the interannual oscillations can not be reconciled in downstream stock assessments (REFs).
 
-Paragraph 4: Here, we diagnose the mechanisms underlying seesaw effects, evaluate conditions that modify their strength, and determine what spatiotemporal model configurations can alleviate the problem. We do this through...
+Here, we diagnose the mechanisms underlying seesaw effects, evaluate conditions that modify their strength, and determine what spatiotemporal model configurations can alleviate such effects. 
+We do this through simulation experiments and case studies. 
+We first simulate data with known underlying properties and apply a suite of spatiotemporal model configurations to assess the properties of estimated indices of abundance compared to the known truth. 
+We then apply what we learn from the simulation experiments to a sequence of TODO case studies from Canada, Norway, and the U.S. to demonstrate the process of diagnosing the presence of seesaw effects and evaluating the ability for specific spatiotemporal model configurations to reduce or eliminate seesaw effects.
 
 \section*{Methods}
 

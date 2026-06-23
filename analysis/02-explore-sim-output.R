@@ -147,12 +147,15 @@ table(out_df$sampled_region)
 table(out_df$label)
 names(out_df)
 
+# lbls <- c("Both regions every year, (same effort)", "Base")
+lbls <- c("(same effort)", "Base")
 out_df |>
+  filter(label %in% lbls) |> 
   mutate(lwr_0.25 = exp(log_est - qnorm(0.75) * se)) |> 
   mutate(upr_0.75 = exp(log_est + qnorm(0.75) * se)) |> 
   mutate(odd_year = year %in% seq(1, 99, 2)) |> 
-  group_by(seed, model) |>
   mutate(log_residual = log(total) - log(est)) |>
+  group_by(seed, model, label) |>
   summarise(
     seesaw_index = abs(mean(log_residual[odd_year]) -
       mean(log_residual[!odd_year])),
@@ -162,16 +165,16 @@ out_df |>
     # coverage = mean(total < upr & total > lwr)
     coverage = mean(total < upr_0.75 & total > lwr_0.25)
   ) |>
-  group_by(model) |>
+  group_by(model, label) |>
   mutate(
     mean_seesaw_index = mean(seesaw_index),
     mean_rmse = mean(rmse)
   ) |>
   ungroup() |>
   arrange(mean_seesaw_index, mean_rmse) |>
-  mutate(model = factor(model, levels = unique(model))) |>
+  mutate(, labelmodel = factor(model, levels = unique(model))) |>
   tidyr::pivot_longer(
-    cols = -c(seed, model, mean_seesaw_index, mean_rmse),
+    cols = -c(seed, model, mean_seesaw_index, mean_rmse, label),
     names_to = "metric"
   ) |>
   filter(metric != "mre") |> 
@@ -196,7 +199,9 @@ out_df |>
     lty = 2,
     colour = "grey85"
   ) +
-  geom_violin(fill = "grey80", colour = "grey30", lwd = 0.4) +
+  geom_violin(colour = "grey30", lwd = 0.4, mapping = aes(fill = label)) +
+  # geom_boxplot(fill = "grey80", colour = "grey30", lwd = 0.4) +
+  # geom_point(fill = "grey80", colour = "grey30", lwd = 0.4) +
   stat_summary(fun = mean, geom = "point", pch = 21, fill = "white") +
   facet_wrap(~metric, scales = "free_x", nrow = 1L) +
   ggsidekick::theme_sleek() +
