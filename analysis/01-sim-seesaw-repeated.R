@@ -34,6 +34,7 @@ library(sdmTMB)
 library(ggplot2)
 library(dplyr)
 source("analysis/funcs.R")
+# source("analysis/funcs-delta-gamma-poisson.R")
 dir.create("figs", showWarnings = FALSE)
 # Simulation testing survey stitching with various models -----------------
 
@@ -51,7 +52,7 @@ sc <- purrr::map(sc, ~ {
 
 if (FALSE) {
   tictoc::tic()
-  out20 <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 3, make_plots = FALSE))
+  out20 <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = FALSE))
   tictoc::toc()
 
   # testing first:
@@ -91,8 +92,8 @@ sanitize_scenario_name <- function(x) {
   ifelse(nchar(x) == 0L, "scenario", x)
 }
 
-output_file <- "data-generated/sawtooth-sim-apr20.rds"
-cache_dir <- "data-generated/sawtooth-sim-apr20-cache"
+output_file <- "data-generated/sawtooth-sim-june23.rds"
+cache_dir <- "data-generated/sawtooth-sim-june23-cache"
 dir.create("data-generated", showWarnings = FALSE)
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 

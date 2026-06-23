@@ -144,6 +144,8 @@ ggsave("figs/example-indices-simulated-2026-04-28.pdf", width = 7.5, height = 6.
 
 glimpse(out_df)
 table(out_df$sampled_region)
+table(out_df$label)
+names(out_df)
 
 out_df |>
   mutate(lwr_0.25 = exp(log_est - qnorm(0.75) * se)) |> 

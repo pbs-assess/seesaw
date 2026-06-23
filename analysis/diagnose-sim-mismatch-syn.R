@@ -4,6 +4,7 @@ library(sdmTMB)
 theme_set(ggsidekick::theme_sleek() + theme(tagger.panel.tag.text = element_text(color = "grey30", size = 9)))
 
 d <- readRDS("~/src/gfsynopsis-2024/report/data-cache-2025-03/lingcod.rds")$survey_sets
+d <- readRDS("~/src/gfsynopsis-2024/report/data-cache-2025-03/pacific-cod.rds")$survey_sets
 d <- filter(d, grepl("^SYN", survey_abbrev))
 d <- mutate(d,
   density_kgkm2 = density_kgpm2 * 1e6,
@@ -38,7 +39,7 @@ table(grid$survey)
 # fit initial models --------------------------------------------
 
 d <- add_utm_columns(d)
-mesh <- make_mesh(d, c("X", "Y"), cutoff = 6)
+mesh <- make_mesh(d, c("X", "Y"), cutoff = 10)
 plot(mesh)
 
 fit <- sdmTMB(

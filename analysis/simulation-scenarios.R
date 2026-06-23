@@ -4,7 +4,7 @@ base <- list(
   n_year = n_year,
   label = "empty", # to be filled
   gap_size = 0.05,
-  sim_coefs = c(10, 0), # linear + quadratic effects on Y coordinate
+  sim_coefs = c(1, 0), # linear + quadratic effects on Y coordinate
   phi = 10,
   obs_sampled_size = 200L,
   obs_yrs = list(
@@ -20,7 +20,7 @@ base <- list(
 )
 
 # N here should match number of scenarios below:
-sc <- purrr::map(seq_len(22L), ~base)
+sc <- purrr::map(seq_len(23L), ~base)
 
 i <- 1
 
@@ -166,6 +166,11 @@ i <- i + 1
 sc[[i]]$label <- "No abundance gradient"
 sc[[i]]$category <- "Abundance gradient"
 sc[[i]]$sim_coefs <- c(0, 0)
+i <- i + 1
+
+sc[[i]]$label <- "Stronger abundance gradient"
+sc[[i]]$category <- "Abundance gradient"
+sc[[i]]$sim_coefs <- c(2, 0)
 i <- i + 1
 
 # # Annual extremes
