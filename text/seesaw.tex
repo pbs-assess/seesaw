@@ -168,14 +168,14 @@ Target journals: CJFAS, ICES JMS, Fisheries Research, Ecological Applications
 Analysts increasingly seek to derive indices of abundance that span multiple survey domains to evaluate whole-stock status or climate-driven range shifts.
 In these situations, survey data are not always sampled across the full expanded domain each year either due to rotating sampling designs or biennial sampling by neighbouring jurisdictions. 
 Geostatistical index standardization offers a natural solution by predicting density in unsampled locations and years.
-However, applying commonly used index standardization models with independent year effects can produce spurious interannual oscillations, which we term ``seesaw'' effects.
+However, applying commonly used index standardization models with independent year effects to rotating or biennial survey data can produce spurious interannual oscillations, which we term ``seesaw'' effects.
 Here, we diagnose the mechanisms underlying seesaw effects, evaluate conditions that modify their strength, and determine which spatiotemporal model configurations alleviate their effects.
 We find the issue arises when models mistake spatial variation in density for temporal variation.
 Strong density gradients in space, high spatiotemporal variance, short spatial correlation range, and spatial gaps between survey coverage accentuate the issue.
 We demonstrate with simulated data and across four case studies that penalizing temporal or spatiotemporal variability via autoregressive correlation structures can reduce or eliminate seesaw effects.
 The challenge remains choosing an appropriate level of penalization because excess penalization can attenuate interannual variability.
-This approach enables analysts to make better use of existing biennial and rotating-design survey data for population-monitoring applications.
-However, we emphasize that even though seesaw effects can be reduced, rotating survey designs remain suboptimal if a goal is characterizing temporal trends across an expanded spatial domain.
+Our approach enables analysts to make better use of existing biennial and rotating-design survey data for population-monitoring applications.
+However, even though seesaw effects can be reduced, we emphasize that rotating survey designs remain suboptimal if a goal is characterizing temporal trends across an expanded spatial domain.
 
 % TODO: make a plot to check the last sentence - precision etc. for the AR(1) RF and biennial sampling as an example against the full coverage standard model!
 
@@ -189,16 +189,17 @@ Within an agency, this can happen as a result of rotating survey designs due to 
 Across agencies, this can occur if one or more neighbouring agencies conduct a survey on a non-annual basis, for example biennially (e.g., REF). 
 
 Geostatistical spatiotemporal models offer a natural solution to reconciling rotating or biennially sampled survey data.
-By creating an expectation of fish density in space and time, such models can infer density across the full survey domain, thereby theoretically accounting for sampling that does not cover the full domain every year \citep{thorson2015Geostatistical}.
+By creating an expectation of fish density in space and time, such models can infer density across the expanded domain, thereby theoretically accounting for sampling that does not cover the full domain every year.
+An area-weighted index of abundance can then be calculated by integrating fish density over the expanded domain \citep{thorson2015Geostatistical, thorsonSpatioTemporalModels2024,andersonsdmTMB2025}.
 A classic formulation of such a model has independent year effects and independent spatiotemporal random effects \citep{thorson2015Geostatistical}.
-This formulation maximizes interannual flexibility and reduces correlation in annual index estimates that are entered into stock assessment models.
+This formulation maximizes interannual flexibility and reduces correlation in annual index estimates that may be entered into a stock assessment model.
 
-While the properties of such independent-year spatiotemporal models applied to typical survey data are well studied, applying these models to rotating or biennial sampling designs can result in interannual oscillations in indices of abundance, which we term here ``seesaw'' effects.
-For example, the phenomenon has been observed for Yelloweye Rockfish \citep{haggarty2021yelloweyeinside} and Quillback Rockfish \citep{huynh2025quillbackoutside} in longline surveys and for Pacific Spiny Dogfish \citep{andersonPacificSpiny2026, davidsonMysteryDisappearing2026} and Lingcod (REF) in bottom trawl surveys off western Canada. 
+While the properties of such independent-year spatiotemporal models applied to typical survey data are well studied \citep[e.g.,][]{thorson2015Geostatistical, yalcinExploringLimits2023}, applying these models to rotating or biennial sampling designs can result in unexpected interannual oscillations in indices of abundance, which we term here ``seesaw'' effects.
+For example, in western Canada, the phenomenon has been observed for stock assessments of Yelloweye Rockfish \citep{haggarty2021yelloweyeinside}, Quillback Rockfish \citep{huynh2025quillbackoutside}, Pacific Spiny Dogfish \citep{andersonPacificSpiny2026} and Lingcod (REF). 
 The effect has been observed for XX in a XX trawl survey in Norway (Figure~1).
 In a transboundary context, the effect has been observed when combining survey data along the entire western U.S.-Canada coast \citep{wardWinLose2024}.
 These seesaw effects do not make sense biologically for these relatively long-lived species---there is no reason to expect a biennial artifact in population abundance.
-One consequence of the effect is that the interannual oscillations can not be reconciled in downstream stock assessments (REFs).
+One consequence of the seesaw effect is that the interannual oscillations can not be reconciled in downstream stock assessments (REFs).
 
 Here, we diagnose the mechanisms underlying seesaw effects, evaluate conditions that modify their strength, and determine what spatiotemporal model configurations can alleviate such effects. 
 We do this through simulation experiments and case studies. 
@@ -210,12 +211,12 @@ We then apply what we learn from the simulation experiments to a sequence of TOD
 \subsection*{Simulation experiment}
 
 We conducted a simulation experiment to identify the conditions that induce, strengthen, or weaken seesaw effects, and to evaluate how a range of spatiotemporal model configurations perform across those conditions.
-We structured the simulation around a base case (Table SX), with individual variables then adjusted upward and downward from that baseline (Table SY). 
+We structured the simulation around a base case, with individual variables then adjusted upward and downward from that baseline (Table~\ref{tab:sim-scenarios}). 
 For example, the base case included 200 observations per year; we also tested scenarios in which this number was doubled and halved. 
-Parameters in the base case were chosen to reflect typical conditions in groundfish trawl survey datasets often fitted on the west coast of Canada (e.g. SYN REF).
+Parameters in the base case were chosen to reflect typical conditions in groundfish trawl survey datasets often fitted on the west coast of Canada \citep[e.g.,][]{andersonReproducibleData2019}.
 
 Our base case simulation had a strong linear gradient in density in log space from north to south, a 12-year time series of annual effects that followed an AR(1) process, and spatial and spatiotemporal GMRFs representing additional spatially correlated latent effects.
-Specifically, it had a spatial GMRF that was constant through time and spatiotemporal GMRFs that were drawn independently each year but with a shared variance among years (Table XX). 
+Specifically, it had a spatial GMRF that was constant through time and spatiotemporal GMRFs that were drawn independently each year but with a shared variance among years. 
 The spatial correlation range was shared between the spatial and spatiotemporal GMRFs, but the spatial and spatiotemporal components had separate variances.
 We simulated a true underlying density on a 100 $\times$ 100 cell grid covering x and y coordinates of 0--1.
 From the true grid of density values, we calculated the area-weighted biomass index by multiplying each grid-cell density by the constant cell area and summing across grid cells.
@@ -223,15 +224,14 @@ We repeated each simulation scenario for 100 iterations, which was sufficient to
 
 Given the true density grid, we randomly selected sampling locations from the scenario-specific sampling domain in each survey year and observed the corresponding grid-cell densities with added Tweedie observation error.
 We implemented several biennial rotating survey designs, focusing on a north-south sampling scheme for simplicity.
-In the biennial scenarios, samples were taken only in the north in odd years and only in the south in even years (Figure X). 
+In the biennial scenarios, samples were taken only in the north in odd years and only in the south in even years (Figure TODO). 
 We compared designs with and without a gap between the north and south regions, and benchmarked these against a reference scenario in which the full domain was sampled every year. 
 In one scenario, we sampled only the last year with full domain coverage to evaluate whether a single year of full coverage could mitigate the seesaw effect.
 
-We fit a sequence of estimation models to the observed values (Table X).
-These ranged from the standard independent year effects with spatial fields and IID spatiotemporal fields to models with autoregressive temporal and/or spatiotemporal structures (Table X).
-Specifically, our models were combinations of spatiotemporal random walk GMRFs, spatiotemporal AR(1) GMRFs, and independent or random walk year effects.
+We fit a sequence of estimation models to the observed values (Table~\ref{tab:model-scenarios}).
+These ranged from the standard independent year effects with spatial fields and IID spatiotemporal fields to models with autoregressive temporal and/or spatiotemporal structures (Table~\ref{tab:model-scenarios}).
 After fitting a model, we estimated an area-weighted biomass index for each year by predicting on the full survey grid, multiplying each prediction by the constant grid cell area, and summing across grid cells.
-We applied a generic bias correction to account for bias and skew due to the non-linear transformation of the random effects (Thorson REF).
+We applied a generic bias correction to account for bias and skew due to the non-linear transformation of the random effects \citep{thorsonImplementingGeneric2016}.
 
 We measured several metrics comparing the estimated and true biomass indices for each scenario.
 First, we measured a ``seesaw index'' $\psi$, which we defined as:
@@ -321,83 +321,58 @@ We evaluated coverage using 50\% CIs because intermediate intervals provide grea
 
 \section*{Tables}
 
-\begin{enumerate}
-  \item Cases around the world where a biennial design happens or is planned
-\end{enumerate}
-
-\begin{table}[htpb]
-\centering
-\caption{Spatial and spatiotemporal models fit to the survey data for index estimation.}
-\label{tab:model-scenarios}
-\begin{tabular}{@{}lllll@{}}
-\toprule
-Model name    & Year treatment     & Spatiotemporal fields & Spatial fields & Covariate estimated \\ 
-\midrule
-IID (1 | year) & Constant mean     & IID                   & Yes            & ---                 \\
-IID RW year   & Random walk        & IID                   & Yes            & ---                 \\
-IID s(year)   & Penalized smoother & IID                   & Yes            & ---                 \\
-RW            & Constant mean      & Random walk           & Yes            & ---                 \\
-IID covariate & Independent means  & IID                   & Yes            & Yes                 \\
-Spatial only  & Independent means  & ---                   & Yes            & ---                 \\
-IID           & Independent means  & IID                   & Yes            & ---                 \\ 
-\bottomrule
-\end{tabular}
-\end{table}
-
-\clearpage
-
-\begin{table}[htpb]
-\centering
-\caption{Features of the base simulation scenario.}
-\label{tab:base-scenario}
-\begin{tabular}{@{}lr@{}}
-\toprule
-Simulation feature & Value \\
-\midrule
-Observation error family        & Tweedie(link = log) \\
-Tweedie dispersion parameter    & 10   \\
-Tweedie power parameter         & 1.5  \\
-North-south gap                 & 0.05 \\
-Linear gradient in density (log space) & 10 per unit Y \\
-Annual sample size              & 200  \\
-Total years                     & 12   \\
-Mat\'ern range                  & 0.1  \\
-Spatial SD                      & 2    \\
-Spatiotemporal SD               & 1.5  \\
-Year AR1 correlation            & 0.5  \\
-Year AR1 marginal SD            & 0.3  \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\clearpage
-
-\begin{table}[htpb]
-\centering
-\caption{Features of the simulation scenarios. All scenarios followed the base case (Table~\ref{tab:base-scenario}) unless otherwise described here.}
-\label{tab:sim-scenarios}
-\begin{tabular}{@{}l p{3in}@{}}
-\toprule
-Simulation scenario label & Scenario description \\
-\midrule
-Large gap                 & North-south gap: 0.15 \\
-No gap                    & North-south gap: 0 \\
-High observation error    & Tweedie dispersion: 20 \\
-Low observation error     & Tweedie dispersion: 5 \\
-High year variation       & Year AR1 SD: 1.0 \\
-No year variation         & Year AR1 SD: 0 \\
-Low range                 & Range: 0.05 \\
-High range                & Range: 0.3 \\
-Low sample size           & Samples per year: 100 \\
-High sample size          & Samples per year: 400 \\
-High spatial variation    & Spatial SD: 3 \\
-Low spatial variation     & Spatial SD: 0.5 \\
-No covariate              & No abundance gradient                      \\
-Year of overlap (same effort)   & One year surveying both regions, distribute the same sampling effort across both regions     \\
-Year of overlap (double effort) & One year surveying both regions, double the overall sampling effort to main sampling density \\
-\bottomrule
-\end{tabular}
-\end{table}
+% \begin{table}[htpb]
+% \centering
+% \caption{Features of the base simulation scenario.}
+% \label{tab:base-scenario}
+% \begin{tabular}{@{}lr@{}}
+% \toprule
+% Simulation feature & Value \\
+% \midrule
+% Observation error family        & Tweedie(link = log) \\
+% Tweedie dispersion parameter    & 10   \\
+% Tweedie power parameter         & 1.5  \\
+% North--south gap                 & 0.05 \\
+% Linear gradient in density (log space) & 10 per unit Y \\
+% Annual sample size              & 200  \\
+% Total years                     & 12   \\
+% Mat\'ern range                  & 0.1  \\
+% Spatial SD                      & 2    \\
+% Spatiotemporal SD               & 1.5  \\
+% Year AR1 correlation            & 0.5  \\
+% Year AR1 marginal SD            & 0.3  \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+%
+% \clearpage
+%
+% \begin{table}[htpb]
+% \centering
+% \caption{Features of the simulation scenarios. All scenarios followed the base case (Table~\ref{tab:base-scenario}) unless otherwise described here.}
+% \label{tab:sim-scenarios}
+% \begin{tabular}{@{}l p{3in}@{}}
+% \toprule
+% Simulation scenario label & Scenario description \\
+% \midrule
+% Large gap                 & North--south gap: 0.15 \\
+% No gap                    & North--south gap: 0 \\
+% High observation error    & Tweedie dispersion: 20 \\
+% Low observation error     & Tweedie dispersion: 5 \\
+% High year variation       & Year AR1 SD: 1.0 \\
+% No year variation         & Year AR1 SD: 0 \\
+% Low range                 & Range: 0.05 \\
+% High range                & Range: 0.3 \\
+% Low sample size           & Samples per year: 100 \\
+% High sample size          & Samples per year: 400 \\
+% High spatial variation    & Spatial SD: 3 \\
+% Low spatial variation     & Spatial SD: 0.5 \\
+% No covariate              & No abundance gradient                      \\
+% Year of overlap (same effort)   & One year surveying both regions, distribute the same sampling effort across both regions     \\
+% Year of overlap (double effort) & One year surveying both regions, double the overall sampling effort to main sampling density \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
 
 % Observation error family        & Tweedie(link = log) \\
 % Tweedie dispersion parameter    & 10   \\
@@ -439,15 +414,16 @@ Year of overlap (double effort) & One year surveying both regions, double the ov
 
 \begin{table}[htpb]
 \centering
-\caption{Features of the simulation scenarios.}
-\label{tab:sim-scenarios2}
-\begin{tabular}{p{2in} p{2in}l p{1.5in}@{}}
-% \begin{tabular}{llll}
+\caption{Properties of the simulation scenarios. The simulations were built around a base condition and alternative scenarios---usually a low and high scenario. SD: standard deviation; AR(1) first-order autoregressive; GMRF: Gaussian Markov random field.}
+\label{tab:sim-scenarios}
+\begin{tabular}{p{1.8in} p{2.2 in}l p{1.5in}@{}}
 \toprule
 Property & Description & Base & Scenarios \\
 \midrule
+Survey domain & Spatial survey domain X and Y coordinates & 0--1 & --- \\
+Survey length & Number of years sampled & 12 & --- \\
 Sample size & Annual survey samples & 200 & 100, 400 \\
-Gap & Gap between the survey domains & 0.05 & 0, 0.15 \\
+Gap & Spatial gap between the survey domains & 0.05 & 0, 0.15 \\
 Observation error & Tweedie dispersion parameter & 10 & 5, 20 \\
 Correlation range & Matern correlation range & 0.1 & 0.05, 0.3 \\
 Spatial variability & Spatial GMRF marginal SD & 2 & 0.5, 3 \\ 
@@ -462,6 +438,30 @@ Overlapping survey, increased effort & Year of overlapping survey coverage with 
 \end{table}
 
 \clearpage
+
+\begin{table}[htpb]
+\centering
+\caption{Spatial and spatiotemporal models fit to the survey data for index estimation. RF: random field; N--S: north-south; IID: independent and identically distributed; RW: random walk; AR(1): first-order autoregressive; factor(year): independent mean estimated for each year.}
+\label{tab:model-scenarios}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Model name                                    & Year treatment     & Spatiotemporal fields \\
+\midrule
+IID RF, factor(year)                          & Independent means  & IID \\
+IID RF, factor(year), N--S gradient estimated  & Independent means  & IID  \\
+Spatial only, factor(year)                    & Independent means  & None \\
+Spatial only, RW year                         & Random walk        & None  \\
+IID RF, RW year                               & Random walk        & IID \\
+RW RF, RW year                                & Random walk        & Random walk \\
+AR(1) RF, RW year                             & Random walk        & AR(1) \\
+RW RF                                         & Starting value     & Random walk \\
+AR(1) RF                                      & Starting value     & AR(1) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
 
 \section*{Figures}
 
@@ -487,7 +487,7 @@ Overlapping survey, increased effort & Year of overlapping survey coverage with 
 \begin{figure}[htb]
     \centering
     \includegraphics[width=0.9\textwidth]{figs/sim-example.pdf}
-    \caption{Example (a) true population density and (b) observed density from a simulation design where a north-south gradient in density exists and sampling is conducted in a alternating biennial design. Grey dots in panel b indicate survey sets with zero observed density.}
+    \caption{Example (a) true population density and (b) observed density from a simulation design where a north--south gradient in density exists and sampling is conducted in a alternating biennial design. Grey dots in panel b indicate survey sets with zero observed density.}
     \label{fig:sim-obs-example}
 \end{figure}
 
