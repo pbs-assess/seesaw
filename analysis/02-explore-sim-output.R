@@ -3,7 +3,15 @@ library(ggplot2)
 library(sdmTMB)
 source("analysis/estimation-scenarios.R")
 source("analysis/simulation-scenarios.R")
-out_df <- readRDS("data-generated/sawtooth-sim-apr20.rds")
+
+# Set once here if you want to override the default date in output filenames.
+date_tag <- format(Sys.Date(), "%Y-%m-%d")
+
+.ggsave <- function(name, ...) {
+  ggsave(here::here("figs", paste0(name, "-", date_tag, ".pdf")), ...)
+}
+
+out_df <- readRDS("data-generated/sawtooth-sim-june23.rds")
 out_df <- filter(out_df, !grepl("s\\(year", model))
 out_df <- filter(out_df, !grepl("year_pair", model))
 out_df <- filter(out_df, !grepl("50\\%", label))
@@ -71,7 +79,7 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 # print(g)
-ggsave("figs/saw-tooth-scenarios-2026-04-28-seed1.pdf", width = 24, height = 32)
+.ggsave("saw-tooth-scenarios-seed1", width = 24, height = 32)
 
 # a minimal version for the main text:
 seed_to_plot <- 3
@@ -113,7 +121,7 @@ out_df |>
   coord_cartesian(ylim = c(10, 2000)) +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 
-ggsave("figs/example-indices-simulated-2026-04-28.pdf", width = 7.5, height = 6.5)
+.ggsave("example-indices-simulated", width = 7.5, height = 6.5)
 
 
 # Look at one point in space... -------------------------------------------
@@ -148,7 +156,7 @@ table(out_df$label)
 names(out_df)
 
 # lbls <- c("Both regions every year, (same effort)", "Base")
-lbls <- c("(same effort)", "Base")
+lbls <- c("Base")
 out_df |>
   filter(label %in% lbls) |> 
   mutate(lwr_0.25 = exp(log_est - qnorm(0.75) * se)) |> 
@@ -172,9 +180,8 @@ out_df |>
   ) |>
   ungroup() |>
   arrange(mean_seesaw_index, mean_rmse) |>
-  mutate(, labelmodel = factor(model, levels = unique(model))) |>
   tidyr::pivot_longer(
-    cols = -c(seed, model, mean_seesaw_index, mean_rmse, label),
+    cols = -c(seed, model, label, mean_seesaw_index, mean_rmse),
     names_to = "metric"
   ) |>
   filter(metric != "mre") |> 
@@ -199,7 +206,7 @@ out_df |>
     lty = 2,
     colour = "grey85"
   ) +
-  geom_violin(colour = "grey30", lwd = 0.4, mapping = aes(fill = label)) +
+  geom_violin(colour = "grey30", lwd = 0.4, fill = "grey50") +
   # geom_boxplot(fill = "grey80", colour = "grey30", lwd = 0.4) +
   # geom_point(fill = "grey80", colour = "grey30", lwd = 0.4) +
   stat_summary(fun = mean, geom = "point", pch = 21, fill = "white") +
@@ -207,7 +214,7 @@ out_df |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
-ggsave("figs/violin-plot-metrics-2026-04-28.pdf", width = 10, height = 4)
+.ggsave("violin-plot-metrics", width = 10, height = 4)
 
 # ---------------------
 # get at distribution
@@ -256,7 +263,7 @@ g <- temp |>
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
 g
-ggsave("figs/saw-tooth-metrics-all-2026-04-28.pdf", width = 7, height = 35)
+.ggsave("saw-tooth-metrics-all", width = 7, height = 35)
 
 # ---------------------------------------------------------------------
 # together in one set of panels?
@@ -285,7 +292,7 @@ g <- temp |>
   ylab("Metric value") +
   coord_flip()
 g
-ggsave("figs/saw-tooth-metrics-condensed-2026-04-28.pdf", width = 7, height = 4)
+.ggsave("saw-tooth-metrics-condensed", width = 7, height = 4)
 
 # ----------------------
 
@@ -315,7 +322,7 @@ temp |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey95"), axis.title.y.left = element_blank()) +
   xlab("Seesaw metric")
-ggsave("figs/saw-tooth-bad-iid-2026-04-28.pdf", width = 4.4, height = 4.5)
+.ggsave("saw-tooth-bad-iid", width = 4.4, height = 4.5)
 
 # convergence?
 
@@ -344,7 +351,7 @@ ggplot(conv, aes(convergence_rate_pct, forcats::fct_reorder(model, convergence_r
     x = "Convergence rate across\nseed \u00d7 scenario",
     y = "Model"
   )
-ggsave("figs/convergence-by-model-2026-04-28.pdf", width = 4.5, height = 5)
+.ggsave("convergence-by-model", width = 4.5, height = 5)
 
 
 # Figures
