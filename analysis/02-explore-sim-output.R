@@ -78,7 +78,7 @@ g <- out_df |>
   scale_colour_manual(values = cols[c(2, 1, 3)]) +
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
-# print(g)
+print(g)
 .ggsave("saw-tooth-scenarios-seed1", width = 24, height = 32)
 
 # a minimal version for the main text:
@@ -206,7 +206,7 @@ out_df |>
     lty = 2,
     colour = "grey85"
   ) +
-  geom_violin(colour = "grey30", lwd = 0.4, fill = "grey50") +
+  geom_violin(colour = "grey30", lwd = 0.4, fill = "grey70") +
   # geom_boxplot(fill = "grey80", colour = "grey30", lwd = 0.4) +
   # geom_point(fill = "grey80", colour = "grey30", lwd = 0.4) +
   stat_summary(fun = mean, geom = "point", pch = 21, fill = "white") +
@@ -298,19 +298,22 @@ g
 
 temp <- out_df |>
   left_join(lu) |> 
+  filter(model == "IID RF, factor(year)") |> 
   group_by(label, model, seed) |>
   mutate(log_residual = log(total) - log(est)) |>
   summarise(
     seesaw_index = abs(mean(log_residual[odd]) - mean(log_residual[!odd]))
   ) |>
+  group_by(seed) |> 
+  mutate(seesaw_index = seesaw_index / seesaw_index[label == "Base"]) |> 
+  ungroup() |> 
   group_by(label, model) |>
   summarize(
     lwr = quantile(seesaw_index, 0.2, na.rm=TRUE),
     upr = quantile(seesaw_index, 0.8, na.rm=TRUE),
     med = median(seesaw_index, na.rm=TRUE)
   ) |>
-  ungroup() |>
-  filter(model == "IID RF, factor(year)")
+  ungroup()
 
 vert_line <- filter(temp, label == "Base") |> pull(med)
 temp |>

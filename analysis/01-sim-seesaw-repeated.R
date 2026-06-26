@@ -92,12 +92,12 @@ sanitize_scenario_name <- function(x) {
   ifelse(nchar(x) == 0L, "scenario", x)
 }
 
-output_file <- "data-generated/sawtooth-sim-june23.rds"
-cache_dir <- "data-generated/sawtooth-sim-june23-cache"
+output_file <- "data-generated/sawtooth-sim-june26.rds"
+cache_dir <- "data-generated/sawtooth-sim-june26-cache"
 dir.create("data-generated", showWarnings = FALSE)
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 
-seeds <- seq_len(50)
+seeds <- seq_len(15)
 scenario_slugs <- make.unique(vapply(names(sc), sanitize_scenario_name, character(1)), sep = "-dup-")
 tasks <- tidyr::crossing(
   seed = seeds,
