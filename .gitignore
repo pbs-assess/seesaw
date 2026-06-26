@@ -17,3 +17,4 @@ text/seesaw.fdb_latexmk
 *.aux
 text/seesaw.bbl
 text/seesaw.blg
+.positai

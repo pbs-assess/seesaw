@@ -1,0 +1,253 @@
+---
+title: Walleye Pollock in BC case study
+author: Sean C. Anderson
+---
+
+Load libraries:
+
+```{r}
+library(sdmTMB)
+library(ggplot2)
+theme_set(theme_light())
+library(dplyr)
+```
+
+Load survey data and survey grid:
+
+```{r}
+# surveyjoin::cache_data()
+surveyjoin::load_sql_data()
+
+dat <- surveyjoin::get_data("lingcod", regions = "pbs") |>
+  mutate(year = lubridate::year(lubridate::ymd(date))) |> 
+  select(survey_name, year, lon_start, lat_start, depth_m, effort, catch_weight, common_name)
+dat <- sdmTMB::add_utm_columns(dat, ll_names = c("lon_start", "lat_start"), utm_crs = 3156)
+table(dat$survey_name, dat$year)
+dat <- dat |>
+  # Use only complete N/S sampling years
+  filter(!(year %in% c(2003, 2004, 2020))) |>
+  tidyr::drop_na(effort, catch_weight, depth_m) |>
+  # Drop these surveys to be perfectly bienniel
+  filter(!(year == 2007 & survey_name == "SYN WCHG")) |>
+  filter(!(year == 2021 & survey_name == "SYN WCVI"))
+table(dat$survey_name, dat$year)
+  
+grid <- surveyjoin::dfo_synoptic_grid |>
+  sdmTMB::replicate_df("year", unique(dat$year))
+grid <- sdmTMB::add_utm_columns(grid, c("lon", "lat"), utm_crs = 3156)
+
+map_data <- rnaturalearth::ne_countries(
+  scale = "large",
+  returnclass = "sf", country = "canada")
+bc_coast <- suppressWarnings(suppressMessages(
+  sf::st_crop(map_data,
+    c(xmin = -134, ymin = 46, xmax = -120, ymax = 57))))
+bc_coast <- sf::st_transform(bc_coast, crs = 3156)
+```
+
+```{r}
+table(dat$survey_name, dat$year)
+```
+
+We can visualize the raw survey data:
+
+```{r raw-data-plot}
+.xlim <- range(dat$X * 1000)
+.ylim <- range(dat$Y * 1000)
+pos_dat <- filter(dat, catch_weight > 0)
+zero_dat <- filter(dat, catch_weight == 0)
+
+ggplot() + 
+  geom_sf(data = bc_coast) +
+  geom_point(data = zero_dat, 
+    mapping = aes(X * 1000, Y * 1000), 
+    pch = 4, 
+    alpha = 0.8, 
+    colour = "grey40"
+  ) +
+  geom_point(data = pos_dat, 
+    mapping = aes(X * 1000, Y * 1000, 
+      size = catch_weight / effort, 
+      colour = catch_weight / effort), 
+    pch = 21, 
+    alpha = 0.9
+  ) +
+  facet_wrap(~year) +
+  scale_colour_viridis_c(trans = "log10") +
+  scale_size_area(max_size = 8) + 
+  coord_sf(xlim = .xlim, ylim = .ylim) +
+  labs(colour = "Catch (kg) per ha", size = "Catch (kg) per ha") +
+  xlab("Longitude (°)") + ylab("Latitude (°)")
+```
+
+Set up a finite-element mesh to implement the SPDE approach:
+
+```{r mesh}
+mesh <- make_mesh(dat, c("X", "Y"), cutoff = 15)
+plot(mesh)
+```
+
+We'll initialize an empty list to store our model fits:
+
+```{r fits-list}
+fits <- list()
+```
+
+First, we'll fit a standard spatiotemporal model with independent year effects, a spatial GMRF, and independent spatiotemporal GMRFs:
+
+```{r fit1}
+fits[[1]] <- sdmTMB(
+  catch_weight ~ 0 + factor(year),
+  data = dat,
+  mesh = mesh,
+  offset = log(dat$effort),
+  family = delta_gamma(type = "poisson-link"),
+  time = "year",
+  spatial = "on",
+  spatiotemporal = "iid",
+  share_range = TRUE,
+  anisotropy = TRUE,
+  silent = FALSE
+)
+names(fits)[[1]] <- "IID RF, factor(year)"
+```
+
+We can inspect this model with some basic diagnostics:
+
+```{r print}
+print(fits[[1]])
+```
+
+```{r sanity}
+sanity(fits[[1]])
+```
+
+```{r anisoplot}
+plot_anisotropy(fits[[1]])
+```
+
+```{r dharma}
+set.seed(1)
+simulate(fits[[1]], nsim = 200, type = "mle-mvn") |> 
+  dharma_residuals(fits[[1]])
+```
+
+We can calculate a relative biomass index from this model fit by predicting from our model onto the survey grid each year and summing predicting density across the domain:
+
+```{r index0}
+pred <- predict(fits[[1]], newdata = grid, return_tmb_obj = TRUE)
+ind <- get_index(pred)
+```
+
+Make a look-up table to keep track of even years for plotting:
+
+```{r}
+lu <- data.frame(year = sort(unique(dat$year)))
+lu$even <- lu$year %% 2 == 0
+lu$survey_group <- ifelse(lu$even, "WCHG + WCVI", "QCS + HS")
+```
+
+```{r}
+ind |>
+  left_join(lu) |> 
+  ggplot(aes(year, est, ymin = lwr, ymax = upr)) + 
+  geom_ribbon(fill = "grey90") +
+  geom_linerange(aes(colour = survey_group)) +
+  geom_point(aes(colour = survey_group), size = 2) +
+  scale_colour_brewer(palette = "Dark2") +
+  ylab("Biomass index") + xlab("Year") + labs(colour = "Survey\ngrouping")
+
+```
+
+Next, we'll fit a sequence of alternative models
+
+```{r}
+fits[[2]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "rw"
+)
+names(fits)[[2]] <- "RW RF"
+```
+
+```{r}
+fits[[3]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "ar1"
+)
+names(fits)[[3]] <- "AR1 RF"
+```
+
+```{r}
+fits[[4]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "rw",
+  time_varying = ~ 1,
+  time_varying_type = "rw0"
+)
+names(fits)[[4]] <- "RW RF, RW year"
+```
+
+```{r}
+fits[[5]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "ar1",
+  time_varying = ~ 1,
+  time_varying_type = "rw0"
+)
+names(fits)[[5]] <- "AR1 RF, RW year"
+```
+
+```{r}
+fits[[6]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "iid",
+  time_varying = ~ 1,
+  time_varying_type = "rw0"
+)
+names(fits)[[6]] <- "IID RF, RW year"
+```
+
+```{r}
+fits[[7]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "off",
+  time_varying = ~ 1,
+  time_varying_type = "rw0"
+)
+names(fits)[[7]] <- "Spatial only, RW year"
+```
+
+Iterate through our fits to grab the biomass index:
+
+```{r}
+future::plan(future::multisession, workers = 4L)
+indexes <- furrr::future_map_dfr(fits, \(x) {
+  pred <- predict(x, newdata = grid, return_tmb_obj = TRUE)
+  get_index(pred)
+}, .id = "model", .options = furrr::furrr_options(seed = TRUE))
+future::plan(future::sequential)
+```
+
+```{r}
+saveRDS(indexes, file = "data-generated/bc-indexes-lingcod.rds")
+indexes <- readRDS("data-generated/bc-indexes-lingcod.rds")
+```
+
+
+```{r}
+indexes |>
+  left_join(lu) |> 
+  ggplot(aes(year, est, ymin = lwr, ymax = upr)) + 
+  geom_ribbon(fill = "grey90") +
+  geom_linerange(aes(colour = survey_group)) +
+  geom_point(aes(colour = survey_group), size = 2) +
+  scale_colour_brewer(palette = "Dark2") +
+  facet_wrap(~model) +
+  ylab("Biomass index") + xlab("Year") + labs(colour = "Survey\ngrouping")
+```
