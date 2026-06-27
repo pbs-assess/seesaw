@@ -34,6 +34,50 @@ surveyjoin::load_sql_data()
 do_fit <- function(.sp) {
   RhpcBLASctl::blas_set_num_threads(1)
   RhpcBLASctl::omp_set_num_threads(1)
+
+  safe_sanity <- function(fit, model_name) {
+    if (!inherits(fit, "sdmTMB")) {
+      return(FALSE)
+    }
+    ok <- tryCatch(
+      all(unlist(sanity(fit, gradient_thresh = 0.01))),
+      error = function(e) {
+        message(.sp, " - ", model_name, " sanity check errored: ", conditionMessage(e))
+        FALSE
+      }
+    )
+    if (!ok) {
+      message(.sp, " - ", model_name, " failed sanity checks.")
+    }
+    ok
+  }
+
+  safe_fit <- function(model_name, expr) {
+    message(.sp, " - fitting ", model_name)
+    fit <- tryCatch(
+      expr,
+      error = function(e) {
+        message(.sp, " - ", model_name, " fit errored: ", conditionMessage(e))
+        NULL
+      }
+    )
+    if (safe_sanity(fit, model_name)) {
+      fit
+    } else {
+      NULL
+    }
+  }
+
+  safe_index <- function(fit, model_name) {
+    tryCatch({
+      pred <- predict(fit, newdata = grid, return_tmb_obj = TRUE)
+      get_index(pred)
+    }, error = function(e) {
+      message(.sp, " - ", model_name, " index errored: ", conditionMessage(e))
+      NULL
+    })
+  }
+
   dat <- surveyjoin::get_data(.sp, regions = "pbs") |>
     mutate(year = lubridate::year(lubridate::ymd(date))) |>
     select(survey_name, year, lon_start, lat_start, depth_m, effort, catch_weight, common_name)
@@ -64,7 +108,8 @@ do_fit <- function(.sp) {
 
   fits <- list()
 
-  fits[[1]] <- sdmTMB(
+  base_model <- "IID RF, factor(year)"
+  fits[[base_model]] <- safe_fit(base_model, sdmTMB(
     catch_weight ~ 0 + factor(year),
     data = dat,
     mesh = mesh,
@@ -76,65 +121,62 @@ do_fit <- function(.sp) {
     share_range = TRUE,
     anisotropy = TRUE,
     silent = FALSE
-  )
-  names(fits)[[1]] <- "IID RF, factor(year)"
+  ))
 
-  fits[[2]] <- update(
-    fits[[1]],
+  if (is.null(fits[[base_model]])) {
+    message(.sp, " - skipping species because the base model did not fit.")
+    return(dplyr::tibble())
+  }
+
+  fits[["RW RF"]] <- safe_fit("RW RF", update(
+    fits[[base_model]],
     formula. = . ~ 1,
     spatiotemporal = "rw"
-  )
-  names(fits)[[2]] <- "RW RF"
+  ))
 
-  fits[[3]] <- update(
-    fits[[1]],
+  fits[["AR1 RF"]] <- safe_fit("AR1 RF", update(
+    fits[[base_model]],
     formula. = . ~ 1,
     spatiotemporal = "ar1"
-  )
-  names(fits)[[3]] <- "AR1 RF"
+  ))
 
-  fits[[4]] <- update(
-    fits[[1]],
+  fits[["RW RF, RW year"]] <- safe_fit("RW RF, RW year", update(
+    fits[[base_model]],
     formula. = . ~ 1,
     spatiotemporal = "rw",
     time_varying = ~ 1,
     time_varying_type = "rw0"
-  )
-  names(fits)[[4]] <- "RW RF, RW year"
+  ))
 
-  fits[[5]] <- update(
-    fits[[1]],
+  fits[["AR1 RF, RW year"]] <- safe_fit("AR1 RF, RW year", update(
+    fits[[base_model]],
     formula. = . ~ 1,
     spatiotemporal = "ar1",
     time_varying = ~ 1,
     time_varying_type = "rw0"
-  )
-  names(fits)[[5]] <- "AR1 RF, RW year"
+  ))
 
-  fits[[6]] <- update(
-    fits[[1]],
+  fits[["IID RF, RW year"]] <- safe_fit("IID RF, RW year", update(
+    fits[[base_model]],
     formula. = . ~ 1,
     spatiotemporal = "iid",
     time_varying = ~ 1,
     time_varying_type = "rw0"
-  )
-  names(fits)[[6]] <- "IID RF, RW year"
+  ))
 
-  fits[[7]] <- update(
-    fits[[1]],
+  fits[["Spatial only, RW year"]] <- safe_fit("Spatial only, RW year", update(
+    fits[[base_model]],
     formula. = . ~ 1,
     spatiotemporal = "off",
     time_varying = ~ 1,
     time_varying_type = "rw0"
-  )
-  names(fits)[[7]] <- "Spatial only, RW year"
+  ))
 
-  indexes <- purrr::map_dfr(fits, \(x) {
-    pred <- predict(x, newdata = grid, return_tmb_obj = TRUE)
-    get_index(pred)
-  }, .id = "model")
+  indexes <- purrr::imap(fits, \(x, nm) safe_index(x, nm)) |>
+    dplyr::bind_rows(.id = "model")
 
   indexes$species <- .sp
+  indexes
 }
 
 
