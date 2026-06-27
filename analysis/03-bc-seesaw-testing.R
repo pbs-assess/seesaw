@@ -1,15 +1,25 @@
+# 2026-06-26
+# Running across 21 synoptic groundfish
+# Could do for HBLL OUT too
+# And maybe HBLL inside??
+# Assess the seesawness for the various models 
+# Maybe add back a version that has depth included
+# And add back a version that has all the bits and pieces (not perfectly biennial) added back too?
+# And try a version with a factor for region in that case?
+# Could probably also look at correlates in this case (e.g., estimate things like north-south gradient or difference in mean density by subregion)
+#
+# Then do this for the Norwegian survey?
+# Can summarize the overall findings and show some case study panels in paper
+#
+# This could be more informative than the simulation study on which models work... although only that can get at the coverage and RMSE
+
 library(sdmTMB)
 library(ggplot2)
 theme_set(theme_light())
 library(dplyr)
 
-# surveyjoin::cache_data()
+surveyjoin::cache_data()
 surveyjoin::load_sql_data()
-
-Sys.setenv(
-  OMP_NUM_THREADS = "1",
-  OPENBLAS_NUM_THREADS = "1"
-)
 
 # dat_test <- surveyjoin::get_data(regions = "pbs")
 # spp_to_fit <- dat_test |>
@@ -22,6 +32,8 @@ Sys.setenv(
 # dput(spp_to_fit)
 
 do_fit <- function(.sp) {
+  RhpcBLASctl::blas_set_num_threads(1)
+  RhpcBLASctl::omp_set_num_threads(1)
   dat <- surveyjoin::get_data(.sp, regions = "pbs") |>
     mutate(year = lubridate::year(lubridate::ymd(date))) |>
     select(survey_name, year, lon_start, lat_start, depth_m, effort, catch_weight, common_name)
@@ -132,8 +144,13 @@ spp_to_fit <- c("arrowtooth flounder", "dover sole", "english sole", "flathead s
   "petrale sole", "redbanded rockfish", "rex sole", "sablefish",
   "sharpchin rockfish", "shortspine thornyhead", "slender sole",
   "spotted ratfish", "walleye pollock")
+print(length(spp_to_fit))
+
+RhpcBLASctl::blas_set_num_threads(1)
+RhpcBLASctl::omp_set_num_threads(1)
 
 future::plan(future::multicore, workers = min(c(length(spp_to_fit), future::availableCores())))
+# future::plan(future::multicore, workers = 3L)
 out <- furrr::future_map_dfr(spp_to_fit, do_fit)
 dir.create("data-generated")
 saveRDS(out, file = "data-generated/bc-indexes.rds")
@@ -141,8 +158,6 @@ saveRDS(out, file = "data-generated/bc-indexes.rds")
 # lu <- data.frame(year = sort(unique(dat$year)))
 # lu$even <- lu$year %% 2 == 0
 # lu$survey_group <- ifelse(lu$even, "WCHG + WCVI", "QCS + HS")
-
-
 
 # indexes |>
 #   left_join(lu) |>
