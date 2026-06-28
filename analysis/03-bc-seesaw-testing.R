@@ -2,7 +2,7 @@
 # Running across 21 synoptic groundfish
 # Could do for HBLL OUT too
 # And maybe HBLL inside??
-# Assess the seesawness for the various models 
+# Assess the seesawness for the various models
 # Maybe add back a version that has depth included
 # And add back a version that has all the bits and pieces (not perfectly biennial) added back too?
 # And try a version with a factor for region in that case?
@@ -32,8 +32,8 @@ surveyjoin::load_sql_data()
 # dput(spp_to_fit)
 
 do_fit <- function(.sp) {
-  RhpcBLASctl::blas_set_num_threads(1)
-  RhpcBLASctl::omp_set_num_threads(1)
+  RhpcBLASctl::blas_set_num_threads(1L)
+  RhpcBLASctl::omp_set_num_threads(1L)
 
   safe_sanity <- function(fit, model_name) {
     if (!inherits(fit, "sdmTMB")) {
@@ -78,33 +78,28 @@ do_fit <- function(.sp) {
     })
   }
 
-  dat <- surveyjoin::get_data(.sp, regions = "pbs") |>
+  dat0 <- surveyjoin::get_data(.sp, regions = "pbs") |>
     mutate(year = lubridate::year(lubridate::ymd(date))) |>
     select(survey_name, year, lon_start, lat_start, depth_m, effort, catch_weight, common_name)
 
-  dat <- sdmTMB::add_utm_columns(dat, ll_names = c("lon_start", "lat_start"), utm_crs = 3156)
-  dat <- dat |>
+  dat0 <- sdmTMB::add_utm_columns(dat0, ll_names = c("lon_start", "lat_start"), utm_crs = 3156)
+  dat <- dat0 |>
     # Use only complete N/S sampling years
     filter(!(year %in% c(2003, 2004, 2020))) |>
     tidyr::drop_na(effort, catch_weight, depth_m) |>
     # Drop these surveys to be perfectly bienniel
     filter(!(year == 2007 & survey_name == "SYN WCHG")) |>
     filter(!(year == 2021 & survey_name == "SYN WCVI"))
-  table(dat$survey_name, dat$year)
+
+  dat_all <- dat0 |>
+    tidyr::drop_na(effort, catch_weight, depth_m)
 
   grid <- surveyjoin::dfo_synoptic_grid |>
     sdmTMB::replicate_df("year", unique(dat$year))
   grid <- sdmTMB::add_utm_columns(grid, c("lon", "lat"), utm_crs = 3156)
 
-  map_data <- rnaturalearth::ne_countries(
-    scale = "large",
-    returnclass = "sf", country = "canada")
-  bc_coast <- suppressWarnings(suppressMessages(
-    sf::st_crop(map_data,
-      c(xmin = -134, ymin = 46, xmax = -120, ymax = 57))))
-  bc_coast <- sf::st_transform(bc_coast, crs = 3156)
-
-  mesh <- make_mesh(dat, c("X", "Y"), cutoff = 15)
+  mesh <- make_mesh(dat, c("X", "Y"), cutoff = 10)
+  mesh_all <- make_mesh(dat_all, c("X", "Y"), mesh = mesh$mesh)
 
   fits <- list()
 
@@ -127,6 +122,19 @@ do_fit <- function(.sp) {
     message(.sp, " - skipping species because the base model did not fit.")
     return(dplyr::tibble())
   }
+
+  fits[["IID RF, factor(year), all data"]] <- safe_fit("IID RF, factor(year), all data", update(
+    fits[[base_model]],
+    data = data_all,
+    mesh = mesh_all
+  ))
+
+  fits[["IID RF, factor(year), factor(survey), all data"]] <- safe_fit("IID RF, factor(year), factor(survey), all data", update(
+    fits[[base_model]],
+    formula. = . ~ factor(year) + factor(survey_name),
+    data = data_all,
+    mesh = mesh_all
+  ))
 
   fits[["RW RF"]] <- safe_fit("RW RF", update(
     fits[[base_model]],
@@ -172,6 +180,14 @@ do_fit <- function(.sp) {
     time_varying_type = "rw0"
   ))
 
+  fits[["IID RF, factor(year), depth"]] <- safe_fit("Spatial only, RW year", update(
+    fits[[base_model]],
+    formula. = . ~ 1,
+    spatiotemporal = "off",
+    time_varying = ~ 1,
+    time_varying_type = "rw0"
+  ))
+
   indexes <- purrr::imap(fits, \(x, nm) safe_index(x, nm)) |>
     dplyr::bind_rows(.id = "model")
 
@@ -180,33 +196,66 @@ do_fit <- function(.sp) {
 }
 
 
-spp_to_fit <- c("arrowtooth flounder", "dover sole", "english sole", "flathead sole",
-  "greenstriped rockfish", "lingcod", "longnose skate", "north pacific hake",
-  "pacific cod", "pacific halibut", "pacific ocean perch", "pacific spiny dogfish",
-  "petrale sole", "redbanded rockfish", "rex sole", "sablefish",
-  "sharpchin rockfish", "shortspine thornyhead", "slender sole",
-  "spotted ratfish", "walleye pollock")
-print(length(spp_to_fit))
+spp_to_fit <- c(
+  "arrowtooth flounder",
+  "dover sole",
+  "english sole",
+  "flathead sole",
+  # "greenstriped rockfish",
+  "lingcod",
+  "longnose skate",
+  # "north pacific hake",
+  "pacific cod",
+  "pacific halibut",
+  "pacific ocean perch",
+  "pacific spiny dogfish",
+  "petrale sole",
+  "redbanded rockfish",
+  "rex sole",
+  "sablefish",
+  # "sharpchin rockfish",
+  "shortspine thornyhead",
+  "slender sole",
+  "spotted ratfish",
+  "walleye pollock"
+)
 
-RhpcBLASctl::blas_set_num_threads(1)
-RhpcBLASctl::omp_set_num_threads(1)
+RhpcBLASctl::blas_set_num_threads(1L)
+RhpcBLASctl::omp_set_num_threads(1L)
 
 future::plan(future::multicore, workers = min(c(length(spp_to_fit), future::availableCores())))
-# future::plan(future::multicore, workers = 3L)
 out <- furrr::future_map_dfr(spp_to_fit, do_fit)
 dir.create("data-generated")
 saveRDS(out, file = "data-generated/bc-indexes.rds")
+
+out <- readRDS("data-generated/bc-indexes.rds")
 
 # lu <- data.frame(year = sort(unique(dat$year)))
 # lu$even <- lu$year %% 2 == 0
 # lu$survey_group <- ifelse(lu$even, "WCHG + WCVI", "QCS + HS")
 
-# indexes |>
-#   left_join(lu) |>
-#   ggplot(aes(year, est, ymin = lwr, ymax = upr)) +
-#   geom_ribbon(fill = "grey90") +
-#   geom_linerange(aes(colour = survey_group)) +
-#   geom_point(aes(colour = survey_group), size = 2) +
-#   scale_colour_brewer(palette = "Dark2") +
-#   facet_wrap(~model) +
-#   ylab("Biomass index") + xlab("Year") + labs(colour = "Survey\ngrouping")
+out |>
+  left_join(lu) |>
+  filter(species != "sharpchin rockfish") |>
+  group_by(species, model) |>
+  mutate(geomean = exp(mean(log(est))), est = est / geomean, lwr = lwr / geomean, upr = upr/ geomean) |>
+  ggplot(aes(year, log(est), ymin = log(lwr), ymax = log(upr))) +
+  geom_ribbon(fill = "grey90") +
+  geom_linerange(aes(colour = survey_group)) +
+  geom_point(aes(colour = survey_group), size = 2) +
+  scale_colour_brewer(palette = "Dark2") +
+  facet_grid(model~species) +
+  ylab("Biomass index") + xlab("Year") + labs(colour = "Survey\ngrouping") +
+  ggsidekick::theme_sleek()
+
+out |>
+  left_join(lu) |>
+  group_by(model) |>
+  summarise(n = n())
+
+out |>
+  left_join(lu) |>
+  group_by(species, model) |>
+  summarise(seesaw_index = abs(mean(log_est[which(even)]) - mean(log_est[which(!even)]))) |>
+  ggplot(aes(model, seesaw_index)) + geom_violin() + coord_flip() + scale_y_log10()
+
