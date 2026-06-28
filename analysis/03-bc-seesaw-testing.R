@@ -101,6 +101,8 @@ do_fit <- function(.sp) {
   mesh <- make_mesh(dat, c("X", "Y"), cutoff = 10)
   mesh_all <- make_mesh(dat_all, c("X", "Y"), mesh = mesh$mesh)
 
+  all_yrs <- seq(min(dat$year), max(dat$year))
+
   fits <- list()
 
   base_model <- "IID RF, factor(year)"
@@ -139,13 +141,15 @@ do_fit <- function(.sp) {
   fits[["RW RF"]] <- safe_fit("RW RF", update(
     fits[[base_model]],
     formula. = . ~ 1,
-    spatiotemporal = "rw"
+    spatiotemporal = "rw",
+    extra_time = all_yrs
   ))
 
   fits[["AR1 RF"]] <- safe_fit("AR1 RF", update(
     fits[[base_model]],
     formula. = . ~ 1,
-    spatiotemporal = "ar1"
+    spatiotemporal = "ar1",
+    extra_time = all_yrs
   ))
 
   fits[["RW RF, RW year"]] <- safe_fit("RW RF, RW year", update(
@@ -153,7 +157,9 @@ do_fit <- function(.sp) {
     formula. = . ~ 1,
     spatiotemporal = "rw",
     time_varying = ~ 1,
-    time_varying_type = "rw0"
+    time_varying_type = "rw0",
+    priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
+    extra_time = all_yrs
   ))
 
   fits[["AR1 RF, RW year"]] <- safe_fit("AR1 RF, RW year", update(
@@ -161,7 +167,9 @@ do_fit <- function(.sp) {
     formula. = . ~ 1,
     spatiotemporal = "ar1",
     time_varying = ~ 1,
-    time_varying_type = "rw0"
+    time_varying_type = "rw0",
+    priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
+    extra_time = all_yrs
   ))
 
   fits[["IID RF, RW year"]] <- safe_fit("IID RF, RW year", update(
@@ -169,7 +177,9 @@ do_fit <- function(.sp) {
     formula. = . ~ 1,
     spatiotemporal = "iid",
     time_varying = ~ 1,
-    time_varying_type = "rw0"
+    time_varying_type = "rw0",
+    priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
+    extra_time = all_yrs
   ))
 
   fits[["Spatial only, RW year"]] <- safe_fit("Spatial only, RW year", update(
@@ -177,7 +187,9 @@ do_fit <- function(.sp) {
     formula. = . ~ 1,
     spatiotemporal = "off",
     time_varying = ~ 1,
-    time_varying_type = "rw0"
+    time_varying_type = "rw0",
+    priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
+    extra_time = all_yrs
   ))
 
   fits[["IID RF, factor(year), depth"]] <- safe_fit("Spatial only, RW year", update(
