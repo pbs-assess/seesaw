@@ -243,6 +243,12 @@ fit_species <- function(.sp, .survey, .out_dir, .overwrite = FALSE) {
   out
 }
 
+read_species_results <- function(.spp, .out_dir) {
+  out_files <- file.path(.out_dir, paste0(species_slug(.spp), ".rds"))
+  out_files <- out_files[file.exists(out_files)]
+  purrr::map_dfr(out_files, readRDS)
+}
+
 spp_to_fit_syn <- c(
   "arrowtooth flounder",
   "dover sole",
@@ -300,12 +306,19 @@ dir.create(species_out_dir, showWarnings = FALSE)
 workers <- min(length(spp_to_fit_syn), max(1L, future::availableCores() - 1L))
 future::plan(future::multisession, workers = workers)
 # out <- purrr::map_dfr(spp_to_fit, do_fit, .survey = "synoptic")
-out <- furrr::future_map_dfr(
-  spp_to_fit_syn,
-  fit_species,
-  .survey = "synoptic",
-  .out_dir = species_out_dir,
-  .options = furrr::furrr_options(seed = TRUE, scheduling = 1)
+out <- tryCatch(
+  furrr::future_map_dfr(
+    spp_to_fit_syn,
+    fit_species,
+    .survey = "synoptic",
+    .out_dir = species_out_dir,
+    .options = furrr::furrr_options(seed = TRUE, scheduling = 1)
+  ),
+  error = function(e) {
+    message("future_map_dfr() errored: ", conditionMessage(e))
+    message("Reading completed species results from ", species_out_dir, ".")
+    read_species_results(spp_to_fit_syn, species_out_dir)
+  }
 )
 # out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit, .survey = "hbll")
 future::plan(future::sequential)
