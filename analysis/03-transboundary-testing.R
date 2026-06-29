@@ -68,7 +68,7 @@ do_fit <- function(.sp, .survey) {
     tryCatch(
       {
         pred <- predict(fit, newdata = grid, return_tmb_obj = TRUE)
-        get_index(pred)
+        get_index_split(pred, nsplit = 2L, bias_correct = TRUE)
       },
       error = function(e) {
         message(.sp, " - index errored: ", conditionMessage(e))
@@ -87,7 +87,7 @@ do_fit <- function(.sp, .survey) {
     dat <- dat0 |>
       # Use only complete N/S sampling years
       # filter(!(year %in% c(2003, 2004, 2020))) |>
-      tidyr::drop_na(effort, catch_weight, depth_m) |> 
+      tidyr::drop_na(effort, catch_weight, depth_m) |>
       # Drop these surveys to be perfectly bienniel
       # filter(!(year == 2007 & survey_name == "SYN WCHG")) |>
       # filter(!(year == 2021 & survey_name == "SYN WCVI"))
@@ -97,12 +97,12 @@ do_fit <- function(.sp, .survey) {
       tidyr::drop_na(effort, catch_weight, depth_m)
 
     grid <- surveyjoin::dfo_synoptic_grid |>
-      bind_rows(surveyjoin::nwfsc_grid) |> 
+      bind_rows(surveyjoin::nwfsc_grid) |>
       sdmTMB::replicate_df("year", unique(dat$year))
     grid <- sdmTMB::add_utm_columns(grid, c("lon", "lat"), utm_crs = 3156)
     grid$survey_group <- "pbs"
 
-    mesh <- make_mesh(dat, c("X", "Y"), cutoff = 30)
+    mesh <- make_mesh(dat, c("X", "Y"), cutoff = 35)
     mesh_all <- make_mesh(dat_all, c("X", "Y"), mesh = mesh$mesh)
   }
   if (.survey == "hbll") {
@@ -147,12 +147,12 @@ do_fit <- function(.sp, .survey) {
   #   offset = log(dat_all$effort)
   # ))
 
-  fits[["RW RF"]] <- safe_fit(update(
-    fits[[base_model]],
-    formula. = . ~ factor(survey_group),
-    spatiotemporal = "rw",
-    extra_time = all_yrs
-  ))
+  ### fits[["RW RF"]] <- safe_fit(update(
+  ###   fits[[base_model]],
+  ###   formula. = . ~ factor(survey_group),
+  ###   spatiotemporal = "rw",
+  ###   extra_time = all_yrs
+  ### ))
 
   # fits[["AR1 RF"]] <- safe_fit(update(
   #   fits[[base_model]],
@@ -216,6 +216,33 @@ do_fit <- function(.sp, .survey) {
   indexes
 }
 
+species_slug <- function(x) {
+  gsub("(^-|-$)", "", gsub("[^[:alnum:]]+", "-", tolower(x)))
+}
+
+fit_species <- function(.sp, .survey, .out_dir, .overwrite = FALSE) {
+  out_file <- file.path(.out_dir, paste0(species_slug(.sp), ".rds"))
+  err_file <- file.path(.out_dir, paste0(species_slug(.sp), "-error.txt"))
+
+  if (!.overwrite && file.exists(out_file)) {
+    message(.sp, " - reading existing result.")
+    return(readRDS(out_file))
+  }
+
+  message(.sp, " - starting.")
+  out <- tryCatch(
+    do_fit(.sp, .survey = .survey),
+    error = function(e) {
+      msg <- conditionMessage(e)
+      message(.sp, " - species fit errored: ", msg)
+      writeLines(msg, err_file)
+      dplyr::tibble()
+    }
+  )
+  saveRDS(out, out_file)
+  out
+}
+
 spp_to_fit_syn <- c(
   "arrowtooth flounder",
   "dover sole",
@@ -266,11 +293,22 @@ spp_to_fit_hbll <- c(
 RhpcBLASctl::blas_set_num_threads(1L)
 RhpcBLASctl::omp_set_num_threads(1L)
 
-future::plan(future::multicore, workers = min(c(length(spp_to_fit_syn), future::availableCores())))
-# out <- purrr::map_dfr(spp_to_fit, do_fit, .survey = "synoptic")
-out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit, .survey = "synoptic")
-# out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit, .survey = "hbll")
 dir.create("data-generated", showWarnings = FALSE)
+species_out_dir <- file.path("data-generated", "transboundary-species")
+dir.create(species_out_dir, showWarnings = FALSE)
+
+workers <- min(length(spp_to_fit_syn), max(1L, future::availableCores() - 1L))
+future::plan(future::multisession, workers = workers)
+# out <- purrr::map_dfr(spp_to_fit, do_fit, .survey = "synoptic")
+out <- furrr::future_map_dfr(
+  spp_to_fit_syn,
+  fit_species,
+  .survey = "synoptic",
+  .out_dir = species_out_dir,
+  .options = furrr::furrr_options(seed = TRUE, scheduling = 1)
+)
+# out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit, .survey = "hbll")
+future::plan(future::sequential)
 saveRDS(out, file = "data-generated/transboundary-indexes.rds")
 
 ## out <- readRDS("data-generated/bc-indexes.rds")
@@ -280,9 +318,9 @@ saveRDS(out, file = "data-generated/transboundary-indexes.rds")
 ##   filter(model != "IID RF, factor(year)")
 ## out <- bind_rows(out, out2, out3) |>
 ##   filter(!species %in% c("redbanded rockfish", "shortspine thornyhead"))
-## 
+##
 ## dat <- surveyjoin::get_data("pacific cod", regions = "pbs") |>
-##   mutate(year = lubridate::year(lubridate::ymd(date))) |> 
+##   mutate(year = lubridate::year(lubridate::ymd(date))) |>
 ##   filter(!(year %in% c(2003, 2004, 2020))) |>
 ##   tidyr::drop_na(effort, catch_weight, depth_m) |>
 ##   filter(!(year == 2007 & survey_name == "SYN WCHG")) |>
@@ -290,7 +328,7 @@ saveRDS(out, file = "data-generated/transboundary-indexes.rds")
 ## lu <- data.frame(year = sort(unique(dat$year)))
 ## lu$even <- lu$year %% 2 == 0
 ## lu$survey_group <- ifelse(lu$even, "WCHG + WCVI", "QCS + HS")
-## 
+##
 ## moving_window_acf <- function(x, window = 10L) {
 ##   n <- length(x)
 ##   if (n < window) {
@@ -301,24 +339,24 @@ saveRDS(out, file = "data-generated/transboundary-indexes.rds")
 ##   }, numeric(1L))
 ##   min(acf_vals, na.rm = TRUE)
 ## }
-## 
+##
 ## moving_window_amp <- function(x, window = 10L) {
 ##   n <- length(x)
 ##   if (n < window) {
 ##     return(NA_real_)
 ##   }
 ##   amp_log <- function(y) mean(abs(diff(y, differences = 2))) / 4
-## 
+##
 ##   amp_val <- vapply(seq_len(n - window + 1L), function(i) {
 ##     amp_log(x[i:(i + window - 1L)])
 ##   }, numeric(1L))
 ##   max(amp_val, na.rm = TRUE)
 ## }
-## 
+##
 ## x <- out |>
 ##   group_by(species, model) |>
 ##   summarise(seesaw_index = acf(log_est, plot = FALSE)$acf[2])
-## 
+##
 ## out |>
 ##   left_join(lu) |>
 ##   left_join(x) |>
@@ -335,12 +373,12 @@ saveRDS(out, file = "data-generated/transboundary-indexes.rds")
 ##   labs(colour = "Survey\ngrouping") +
 ##   ggsidekick::theme_sleek()
 ## ggsave("figs/bc-testing.pdf", width = 30, height = 15)
-## 
+##
 ## out |>
 ##   left_join(lu) |>
 ##   group_by(model) |>
 ##   summarise(n = n())
-## 
+##
 ## out |>
 ##   left_join(lu) |>
 ##   group_by(species, model) |>
@@ -355,9 +393,9 @@ saveRDS(out, file = "data-generated/transboundary-indexes.rds")
 ##   scale_colour_gradient2(mid = "grey80") +
 ##   ggsidekick::theme_sleek() +
 ##   theme(axis.title.y = element_blank(), panel.grid.major = element_line(colour = "grey90", linewidth = 0.3), panel.grid.minor = element_line(colour = "grey90", linewidth = 0.3))
-## 
+##
 ## ggsave("figs/bc-trawl-acf.pdf", width = 4.5, height = 3.5)
-## 
+##
 ## out |>
 ##   left_join(lu) |>
 ##   group_by(species, model) |>
@@ -374,7 +412,7 @@ saveRDS(out, file = "data-generated/transboundary-indexes.rds")
 ##   ylab("Most negative lag-1 autocorrelation\nacross 10-year windows") +
 ##   ggsidekick::theme_sleek() +
 ##   theme(axis.title.y = element_blank(), panel.grid.major = element_line(colour = "grey90", linewidth = 0.3), panel.grid.minor = element_line(colour = "grey90", linewidth = 0.3))
-## 
+##
 ## make_fig <- function(what, .ylab = "", include_all_data = FALSE) {
 ##   if (!include_all_data) {
 ##     out1 <- out |>
@@ -383,9 +421,9 @@ saveRDS(out, file = "data-generated/transboundary-indexes.rds")
 ##   } else {
 ##     out1 <- out |> mutate(all_data = grepl("all data", model))
 ##   }
-## 
+##
 ##   log_se_to_cv <- function(sigma_log) sqrt(exp(sigma_log^2) - 1)
-## 
+##
 ##   out1 <- out1 |>
 ##     left_join(lu, by = join_by(year)) |>
 ##     summarise(
@@ -398,36 +436,36 @@ saveRDS(out, file = "data-generated/transboundary-indexes.rds")
 ##     mutate(mean_acf = mean(min_acf)) |>
 ##     ungroup() |>
 ##     mutate(model = forcats::fct_reorder(model, mean_acf))
-## 
+##
 ##   g <- out1 |>
 ##     ggplot(aes(model, {{ what }})) +
 ##     coord_flip() +
 ##     ylab(.ylab) +
 ##     ggsidekick::theme_sleek() +
 ##     theme(axis.title.y = element_blank(), panel.grid.major = element_line(colour = "grey90", linewidth = 0.3), panel.grid.minor = element_line(colour = "grey90", linewidth = 0.3))
-## 
+##
 ##   if (include_all_data) {
 ##     blue <- RColorBrewer::brewer.pal(8, "Blues")[3]
 ##     orange <- RColorBrewer::brewer.pal(8, "Oranges")[3]
-##     g <- g + geom_violin(data = out1, scale = "width", mapping = aes(colour = all_data, fill = all_data)) + 
-##       scale_colour_manual(values = c(blue, orange)) + 
-##       scale_fill_manual(values = c(blue, orange)) + 
+##     g <- g + geom_violin(data = out1, scale = "width", mapping = aes(colour = all_data, fill = all_data)) +
+##       scale_colour_manual(values = c(blue, orange)) +
+##       scale_fill_manual(values = c(blue, orange)) +
 ##       guides(colour = "none", fill = "none")
 ##   } else {
 ##     blue <- RColorBrewer::brewer.pal(8, "Blues")[3]
 ##     g <- g + geom_violin(scale = "width", colour = blue, fill = blue)
 ##   }
-## 
+##
 ##   g + geom_point(position = position_jitter(width = 0), colour = "grey25")
 ## }
-## 
+##
 ## g1 <- make_fig(min_acf, "Most negative\nlag-1 autocorrelation\nacross 10-year windows")
 ## g2 <- make_fig(max_amp, "Maximum biennial\noscillation amplitude\nacross 10-year windows") +
 ##   coord_flip(ylim = c(0, 1.05), expand = FALSE)
 ## g3 <- make_fig(mean_se, "Mean CV")
 ## patchwork::wrap_plots(g1, g2, axes = "collect")
 ## ggsave("figs/bc-trawl-acf-moving-window.pdf", width = 6, height = 3.5)
-## 
+##
 ## g1 <- make_fig(min_acf, "Most negative\nlag-1 autocorrelation\nacross 10-year windows", include_all_data = TRUE)
 ## g2 <- make_fig(max_amp, "Maximum biennial\noscillation amplitude\nacross 10-year windows", include_all_data = TRUE) +
 ##   coord_flip(ylim = c(0, 1.05), expand = FALSE)
