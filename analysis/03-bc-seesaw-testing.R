@@ -3,9 +3,6 @@
 # Could do for HBLL OUT too
 # And maybe HBLL inside??
 # Assess the seesawness for the various models
-# Maybe add back a version that has depth included
-# And add back a version that has all the bits and pieces (not perfectly biennial) added back too?
-# And try a version with a factor for region in that case?
 # Could probably also look at correlates in this case (e.g., estimate things like north-south gradient or difference in mean density by subregion)
 #
 # Then do this for the Norwegian survey?
@@ -127,78 +124,78 @@ do_fit <- function(.sp) {
 
   fits[["IID RF, factor(year), all data"]] <- safe_fit("IID RF, factor(year), all data", update(
     fits[[base_model]],
-    data = data_all,
+    data = dat_all,
     mesh = mesh_all
   ))
 
   fits[["IID RF, factor(year), factor(survey), all data"]] <- safe_fit("IID RF, factor(year), factor(survey), all data", update(
     fits[[base_model]],
     formula. = . ~ factor(year) + factor(survey_name),
-    data = data_all,
+    data = dat_all,
     mesh = mesh_all
   ))
 
-  fits[["RW RF"]] <- safe_fit("RW RF", update(
-    fits[[base_model]],
-    formula. = . ~ 1,
-    spatiotemporal = "rw",
-    extra_time = all_yrs
-  ))
-
-  fits[["AR1 RF"]] <- safe_fit("AR1 RF", update(
-    fits[[base_model]],
-    formula. = . ~ 1,
-    spatiotemporal = "ar1",
-    extra_time = all_yrs
-  ))
-
-  fits[["RW RF, RW year"]] <- safe_fit("RW RF, RW year", update(
-    fits[[base_model]],
-    formula. = . ~ 1,
-    spatiotemporal = "rw",
-    time_varying = ~ 1,
-    time_varying_type = "rw0",
-    priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
-    extra_time = all_yrs
-  ))
-
-  fits[["AR1 RF, RW year"]] <- safe_fit("AR1 RF, RW year", update(
-    fits[[base_model]],
-    formula. = . ~ 1,
-    spatiotemporal = "ar1",
-    time_varying = ~ 1,
-    time_varying_type = "rw0",
-    priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
-    extra_time = all_yrs
-  ))
-
-  fits[["IID RF, RW year"]] <- safe_fit("IID RF, RW year", update(
-    fits[[base_model]],
-    formula. = . ~ 1,
-    spatiotemporal = "iid",
-    time_varying = ~ 1,
-    time_varying_type = "rw0",
-    priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
-    extra_time = all_yrs
-  ))
-
-  fits[["Spatial only, RW year"]] <- safe_fit("Spatial only, RW year", update(
-    fits[[base_model]],
-    formula. = . ~ 1,
-    spatiotemporal = "off",
-    time_varying = ~ 1,
-    time_varying_type = "rw0",
-    priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
-    extra_time = all_yrs
-  ))
-
-  fits[["IID RF, factor(year), depth"]] <- safe_fit("Spatial only, RW year", update(
-    fits[[base_model]],
-    formula. = . ~ 1,
-    spatiotemporal = "off",
-    time_varying = ~ 1,
-    time_varying_type = "rw0"
-  ))
+  # fits[["RW RF"]] <- safe_fit("RW RF", update(
+  #   fits[[base_model]],
+  #   formula. = . ~ 1,
+  #   spatiotemporal = "rw",
+  #   extra_time = all_yrs
+  # ))
+  #
+  # fits[["AR1 RF"]] <- safe_fit("AR1 RF", update(
+  #   fits[[base_model]],
+  #   formula. = . ~ 1,
+  #   spatiotemporal = "ar1",
+  #   extra_time = all_yrs
+  # ))
+  #
+  # fits[["RW RF, RW year"]] <- safe_fit("RW RF, RW year", update(
+  #   fits[[base_model]],
+  #   formula. = . ~ 1,
+  #   spatiotemporal = "rw",
+  #   time_varying = ~ 1,
+  #   time_varying_type = "rw0",
+  #   priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
+  #   extra_time = all_yrs
+  # ))
+  #
+  # fits[["AR1 RF, RW year"]] <- safe_fit("AR1 RF, RW year", update(
+  #   fits[[base_model]],
+  #   formula. = . ~ 1,
+  #   spatiotemporal = "ar1",
+  #   time_varying = ~ 1,
+  #   time_varying_type = "rw0",
+  #   priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
+  #   extra_time = all_yrs
+  # ))
+  #
+  # fits[["IID RF, RW year"]] <- safe_fit("IID RF, RW year", update(
+  #   fits[[base_model]],
+  #   formula. = . ~ 1,
+  #   spatiotemporal = "iid",
+  #   time_varying = ~ 1,
+  #   time_varying_type = "rw0",
+  #   priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
+  #   extra_time = all_yrs
+  # ))
+  #
+  # fits[["Spatial only, RW year"]] <- safe_fit("Spatial only, RW year", update(
+  #   fits[[base_model]],
+  #   formula. = . ~ 1,
+  #   spatiotemporal = "off",
+  #   time_varying = ~ 1,
+  #   time_varying_type = "rw0",
+  #   priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5)),
+  #   extra_time = all_yrs
+  # ))
+  #
+  # fits[["IID RF, factor(year), depth"]] <- safe_fit("Spatial only, RW year", update(
+  #   fits[[base_model]],
+  #   formula. = . ~ 1,
+  #   spatiotemporal = "off",
+  #   time_varying = ~ 1,
+  #   time_varying_type = "rw0"
+  # ))
 
   indexes <- purrr::imap(fits, \(x, nm) safe_index(x, nm)) |>
     dplyr::bind_rows(.id = "model")
@@ -236,15 +233,16 @@ RhpcBLASctl::blas_set_num_threads(1L)
 RhpcBLASctl::omp_set_num_threads(1L)
 
 future::plan(future::multicore, workers = min(c(length(spp_to_fit), future::availableCores())))
+# out <- purrr::map_dfr(spp_to_fit, do_fit)
 out <- furrr::future_map_dfr(spp_to_fit, do_fit)
 dir.create("data-generated")
-saveRDS(out, file = "data-generated/bc-indexes.rds")
+saveRDS(out, file = "data-generated/bc-indexes2.rds")
 
-out <- readRDS("data-generated/bc-indexes.rds")
+out <- readRDS("data-generated/bc-indexes2.rds")
 
-# lu <- data.frame(year = sort(unique(dat$year)))
-# lu$even <- lu$year %% 2 == 0
-# lu$survey_group <- ifelse(lu$even, "WCHG + WCVI", "QCS + HS")
+lu <- data.frame(year = sort(unique(dat$year)))
+lu$even <- lu$year %% 2 == 0
+lu$survey_group <- ifelse(lu$even, "WCHG + WCVI", "QCS + HS")
 
 out |>
   left_join(lu) |>
