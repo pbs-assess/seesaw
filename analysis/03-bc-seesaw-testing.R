@@ -262,8 +262,8 @@ spp_to_fit_hbll <- c(
 RhpcBLASctl::blas_set_num_threads(1L)
 RhpcBLASctl::omp_set_num_threads(1L)
 
-future::plan(future::multicore, workers = min(c(length(spp_to_fit), future::availableCores())))
-out <- purrr::map_dfr(spp_to_fit, do_fit, .survey = "synoptic")
+future::plan(future::multicore, workers = min(c(length(spp_to_fit_syn), future::availableCores())))
+# out <- purrr::map_dfr(spp_to_fit, do_fit, .survey = "synoptic")
 out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit, .survey = "synoptic")
 # out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit, .survey = "hbll")
 dir.create("data-generated")
