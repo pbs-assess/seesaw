@@ -93,6 +93,16 @@ do_fit <- function(.sp, .survey) {
       # filter(!(year == 2021 & survey_name == "SYN WCVI"))
       mutate(survey_group = ifelse(grepl("NWFSC", survey_name), "nwfsc", "pbs"))
 
+    positive_sets <- dat |>
+      group_by(survey_group) |>
+      summarise(prop_positive = mean(catch_weight > 0), .groups = "drop")
+    enough_positive_sets <- all(c("nwfsc", "pbs") %in% positive_sets$survey_group) &&
+      all(positive_sets$prop_positive[match(c("nwfsc", "pbs"), positive_sets$survey_group)] >= 0.10)
+
+    if (!enough_positive_sets) {
+      return(dplyr::tibble())
+    }
+
     dat_all <- dat0 |>
       tidyr::drop_na(effort, catch_weight, depth_m)
 
