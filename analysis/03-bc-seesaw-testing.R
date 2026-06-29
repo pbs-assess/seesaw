@@ -97,6 +97,7 @@ do_fit <- function(.sp, .survey) {
     grid <- surveyjoin::dfo_synoptic_grid |>
       sdmTMB::replicate_df("year", unique(dat$year))
     grid <- sdmTMB::add_utm_columns(grid, c("lon", "lat"), utm_crs = 3156)
+    grid$survey_name <- "SYN WCVI"
 
     mesh <- make_mesh(dat, c("X", "Y"), cutoff = 10)
     mesh_all <- make_mesh(dat_all, c("X", "Y"), mesh = mesh$mesh)
@@ -128,13 +129,13 @@ do_fit <- function(.sp, .survey) {
     return(dplyr::tibble())
   }
 
-  fits[["IID RF, factor(year), all data"]] <- safe_fit(update(
-    fits[[base_model]],
-    data = dat_all,
-    mesh = mesh_all,
-    offset = log(dat_all$effort)
-  ))
-
+  # fits[["IID RF, factor(year), all data"]] <- safe_fit(update(
+  #   fits[[base_model]],
+  #   data = dat_all,
+  #   mesh = mesh_all,
+  #   offset = log(dat_all$effort)
+  # ))
+  #
   fits[["IID RF, factor(year), factor(survey), all data"]] <- safe_fit(update(
     fits[[base_model]],
     formula. = . ~ factor(year) + factor(survey_name),
@@ -267,81 +268,83 @@ future::plan(future::multicore, workers = min(c(length(spp_to_fit_syn), future::
 out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit, .survey = "synoptic")
 # out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit, .survey = "hbll")
 dir.create("data-generated")
-saveRDS(out, file = "data-generated/bc-indexes2.rds")
+saveRDS(out, file = "data-generated/bc-indexes3.rds")
 #
-# out <- readRDS("data-generated/bc-indexes.rds")
-# out2 <- readRDS("data-generated/bc-indexes2.rds")
-#
-# lu <- data.frame(year = sort(unique(dat$year)))
-# lu$even <- lu$year %% 2 == 0
-# lu$survey_group <- ifelse(lu$even, "WCHG + WCVI", "QCS + HS")
-#
-# moving_window_acf <- function(x, window = 8L) {
-#   n <- length(x)
-#   if (n < window) {
-#     return(NA_real_)
-#   }
-#   acf_vals <- vapply(seq_len(n - window + 1L), function(i) {
-#     acf(x[i:(i + window - 1L)], plot = FALSE)$acf[2L]
-#   }, numeric(1L))
-#   min(acf_vals, na.rm = TRUE)
-# }
-#
-# x <- out |>
-#   group_by(species, model) |>
-#   summarise(seesaw_index = acf(log_est, plot = FALSE)$acf[2])
-#
-# out |>
-#   left_join(lu) |>
-#   left_join(x) |>
-#   group_by(species, model) |>
-#   mutate(geomean = exp(mean(log(est))), est = est / geomean, lwr = lwr / geomean, upr = upr / geomean) |>
-#   ggplot(aes(year, log(est), ymin = log(lwr), ymax = log(upr))) +
-#   geom_ribbon(fill = "grey90") +
-#   geom_linerange(aes(colour = survey_group)) +
-#   geom_point(aes(colour = survey_group), size = 2) +
-#   scale_colour_brewer(palette = "Dark2") +
-#   facet_grid(forcats::fct_reorder(model, seesaw_index) ~ species) +
-#   ylab("Biomass index") +
-#   xlab("Year") +
-#   labs(colour = "Survey\ngrouping") +
-#   ggsidekick::theme_sleek()
-# ggsave("figs/bc-testing.pdf", width = 30, height = 15)
-#
-# out |>
-#   left_join(lu) |>
-#   group_by(model) |>
-#   summarise(n = n())
-#
-# out |>
-#   left_join(lu) |>
-#   group_by(species, model) |>
-#   # summarise(seesaw_index = abs(mean(log_est[which(even)]) - mean(log_est[which(!even)]))) |>
-#   summarise(seesaw_index = acf(log_est, plot = FALSE)$acf[2]) |>
-#   group_by(model) |>
-#   mutate(mean_acf = mean(seesaw_index)) |>
-#   ggplot(aes(forcats::fct_reorder(model, mean_acf), seesaw_index)) +
-#   geom_point(position = position_jitter(width = 0)) +
-#   coord_flip() +
-#   ylab("First-order index autocorrelation") +
-#   scale_colour_gradient2(mid = "grey80") +
-#   ggsidekick::theme_sleek() +
-#   theme(axis.title.y = element_blank(), panel.grid.major = element_line(colour = "grey90", linewidth = 0.3), panel.grid.minor = element_line(colour = "grey90", linewidth = 0.3))
-#
-# ggsave("figs/bc-trawl-acf.pdf", width = 4.5, height = 3.5)
-#
-# out |>
-#   left_join(lu) |>
-#   group_by(species, model) |>
-#   summarise(seesaw_index = moving_window_acf(log_est, window = 10)) |>
-#   group_by(model) |>
-#   mutate(mean_acf = mean(seesaw_index)) |>
-#   ggplot(aes(forcats::fct_reorder(model, mean_acf), seesaw_index)) +
-#   geom_point(position = position_jitter(width = 0)) +
-#   coord_flip() +
-#   ylab("Most negative lag-1 autocorrelation\nacross 10-year windows") +
-#   scale_colour_gradient2(mid = "grey80") +
-#   ggsidekick::theme_sleek() +
-#   theme(axis.title.y = element_blank(), panel.grid.major = element_line(colour = "grey90", linewidth = 0.3), panel.grid.minor = element_line(colour = "grey90", linewidth = 0.3))
-#
-# ggsave("figs/bc-trawl-acf-moving-window.pdf", width = 4.5, height = 3.5)
+out <- readRDS("data-generated/bc-indexes.rds")
+out2 <- readRDS("data-generated/bc-indexes2.rds") |>
+  filter(model != "IID RF, factor(year)")
+out <- bind_rows(out, out2)
+
+lu <- data.frame(year = sort(unique(dat$year)))
+lu$even <- lu$year %% 2 == 0
+lu$survey_group <- ifelse(lu$even, "WCHG + WCVI", "QCS + HS")
+
+moving_window_acf <- function(x, window = 8L) {
+  n <- length(x)
+  if (n < window) {
+    return(NA_real_)
+  }
+  acf_vals <- vapply(seq_len(n - window + 1L), function(i) {
+    acf(x[i:(i + window - 1L)], plot = FALSE)$acf[2L]
+  }, numeric(1L))
+  min(acf_vals, na.rm = TRUE)
+}
+
+x <- out |>
+  group_by(species, model) |>
+  summarise(seesaw_index = acf(log_est, plot = FALSE)$acf[2])
+
+out |>
+  left_join(lu) |>
+  left_join(x) |>
+  group_by(species, model) |>
+  mutate(geomean = exp(mean(log(est))), est = est / geomean, lwr = lwr / geomean, upr = upr / geomean) |>
+  ggplot(aes(year, log(est), ymin = log(lwr), ymax = log(upr))) +
+  geom_ribbon(fill = "grey90") +
+  geom_linerange(aes(colour = survey_group)) +
+  geom_point(aes(colour = survey_group), size = 2) +
+  scale_colour_brewer(palette = "Dark2") +
+  facet_grid(forcats::fct_reorder(model, seesaw_index) ~ species) +
+  ylab("Biomass index") +
+  xlab("Year") +
+  labs(colour = "Survey\ngrouping") +
+  ggsidekick::theme_sleek()
+ggsave("figs/bc-testing.pdf", width = 30, height = 15)
+
+out |>
+  left_join(lu) |>
+  group_by(model) |>
+  summarise(n = n())
+
+out |>
+  left_join(lu) |>
+  group_by(species, model) |>
+  # summarise(seesaw_index = abs(mean(log_est[which(even)]) - mean(log_est[which(!even)]))) |>
+  summarise(seesaw_index = acf(log_est, plot = FALSE)$acf[2]) |>
+  group_by(model) |>
+  mutate(mean_acf = mean(seesaw_index)) |>
+  ggplot(aes(forcats::fct_reorder(model, mean_acf), seesaw_index)) +
+  geom_point(position = position_jitter(width = 0)) +
+  coord_flip() +
+  ylab("First-order index autocorrelation") +
+  scale_colour_gradient2(mid = "grey80") +
+  ggsidekick::theme_sleek() +
+  theme(axis.title.y = element_blank(), panel.grid.major = element_line(colour = "grey90", linewidth = 0.3), panel.grid.minor = element_line(colour = "grey90", linewidth = 0.3))
+
+ggsave("figs/bc-trawl-acf.pdf", width = 4.5, height = 3.5)
+
+out |>
+  left_join(lu) |>
+  group_by(species, model) |>
+  summarise(seesaw_index = moving_window_acf(log_est, window = 10)) |>
+  group_by(model) |>
+  mutate(mean_acf = mean(seesaw_index)) |>
+  ggplot(aes(forcats::fct_reorder(model, mean_acf), seesaw_index)) +
+  geom_point(position = position_jitter(width = 0)) +
+  coord_flip() +
+  ylab("Most negative lag-1 autocorrelation\nacross 10-year windows") +
+  scale_colour_gradient2(mid = "grey80") +
+  ggsidekick::theme_sleek() +
+  theme(axis.title.y = element_blank(), panel.grid.major = element_line(colour = "grey90", linewidth = 0.3), panel.grid.minor = element_line(colour = "grey90", linewidth = 0.3))
+
+ggsave("figs/bc-trawl-acf-moving-window.pdf", width = 4.5, height = 3.5)
