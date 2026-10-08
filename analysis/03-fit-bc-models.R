@@ -279,7 +279,7 @@ out <- bind_rows(out, out2, out3) |>
   filter(!species %in% c("redbanded rockfish", "shortspine thornyhead"))
 
 dat <- surveyjoin::get_data("pacific cod", regions = "pbs") |>
-  mutate(year = lubridate::year(lubridate::ymd(date))) |> 
+  mutate(year = lubridate::year(lubridate::ymd(date))) |>
   filter(!(year %in% c(2003, 2004, 2020))) |>
   tidyr::drop_na(effort, catch_weight, depth_m) |>
   filter(!(year == 2007 & survey_name == "SYN WCHG")) |>
@@ -331,7 +331,7 @@ out |>
   xlab("Year") +
   labs(colour = "Survey\ngrouping") +
   ggsidekick::theme_sleek()
-ggsave("figs/bc-testing.pdf", width = 30, height = 15)
+ggsave("figs/bc-testing2.pdf", width = 30, height = 15)
 
 out |>
   left_join(lu) |>
@@ -406,9 +406,9 @@ make_fig <- function(what, .ylab = "", include_all_data = FALSE) {
   if (include_all_data) {
     blue <- RColorBrewer::brewer.pal(8, "Blues")[3]
     orange <- RColorBrewer::brewer.pal(8, "Oranges")[3]
-    g <- g + geom_violin(data = out1, scale = "width", mapping = aes(colour = all_data, fill = all_data)) + 
-      scale_colour_manual(values = c(blue, orange)) + 
-      scale_fill_manual(values = c(blue, orange)) + 
+    g <- g + geom_violin(data = out1, scale = "width", mapping = aes(colour = all_data, fill = all_data)) +
+      scale_colour_manual(values = c(blue, orange)) +
+      scale_fill_manual(values = c(blue, orange)) +
       guides(colour = "none", fill = "none")
   } else {
     blue <- RColorBrewer::brewer.pal(8, "Blues")[3]

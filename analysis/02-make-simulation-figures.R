@@ -4,7 +4,6 @@ library(sdmTMB)
 source("analysis/estimation-scenarios.R")
 source("analysis/simulation-scenarios.R")
 
-# Set once here if you want to override the default date in output filenames.
 date_tag <- format(Sys.Date(), "%Y-%m-%d")
 
 .ggsave <- function(name, ...) {
@@ -43,7 +42,7 @@ out_df <- out_df |>
 cols <- RColorBrewer::brewer.pal(3L, "Set2")
 names(cols) <- c("north", "south", "both")
 
-seed_to_plot <- 1
+seed_to_plot <- 3
 actual <- select(out_df, label, year, total, seed, sampled_region) |>
   filter(seed == seed_to_plot) |>
   distinct()
@@ -79,16 +78,17 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 print(g)
-.ggsave("saw-tooth-scenarios-seed1", width = 24, height = 32)
+.ggsave("saw-tooth-scenarios-seed3", width = 24, height = 32)
 
 # a minimal version for the main text:
-seed_to_plot <- 3
+seed_to_plot <- 4
 actual <- select(out_df, label, year, total, seed, sampled_region) |>
   filter(seed == seed_to_plot) |>
   distinct()
 actual2 <- mutate(actual, label = as.character(label))
 
 labels <- c("Base", "No gap", "Large gap", "High range", "Low range")
+labels <- c("Base", "No gap", "Large gap", "Both regions every year, (same effort)")
 labels_wrapped <- wrap_label(labels)
 
 .actual2 <- dplyr::filter(actual2, label %in% labels) |>
@@ -96,15 +96,15 @@ labels_wrapped <- wrap_label(labels)
 SCALER <- 1e4
 out_df |>
   filter(seed == seed_to_plot) |>
-  filter(label %in% labels, with_depth == "covariate = FALSE", model %in% c("RW RF", "IID RF, factor(year)", "IID RF, RW year", "AR(1) RF")) |>
+  filter(label %in% labels, with_depth == "covariate = FALSE", model %in% c("RW RF", "IID RF, factor(year)", "IID RF, RW year", "RW RF, RW year")) |>
   mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
   mutate(label = factor(wrap_label(as.character(label)),
     levels = labels_wrapped
   )) |>
   ggplot(aes(year, est/SCALER, ymin = lwr/SCALER, ymax = upr/SCALER)) +
   ggsidekick::theme_sleek() +
-  geom_pointrange(aes(colour = sampled_region)) +
-  # geom_line(colour = "grey50") +
+  geom_linerange(aes(colour = sampled_region)) +
+  geom_point(aes(colour = sampled_region), size = 2) +
   geom_ribbon(alpha = 0.20, colour = NA) +
   geom_line(
     data = .actual2, mapping = aes(year, total/SCALER),
@@ -113,40 +113,16 @@ out_df |>
   facet_grid(label ~ model,
     scales = "free_y"
   ) +
+  theme(panel.spacing = grid::unit(-0.1, "lines")) +
   ylab("Abundance estimate") +
   xlab("Year") +
   labs(colour = "Sampled region") +
   scale_colour_manual(values = cols[c(2, 1, 3)]) +
   scale_y_log10() +
-  coord_cartesian(ylim = c(10, 2000)) +
+  coord_cartesian(ylim = c(9, 200)) +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 
-.ggsave("example-indices-simulated", width = 7.5, height = 6.5)
-
-
-# Look at one point in space... -------------------------------------------
-
-# get_eg_cell <- function(obj, x, y) {
-#   obj$data[
-#     round(obj$data$X, 3) == round(x, 3) &
-#       round(obj$data$Y, 3) == round(y, 3),
-#   ]
-# }
-#
-# p1 <- purrr::map_dfr(preds, get_eg_cell,
-#   x = 0.50505051, y = 0.81818182,
-#   .id = "model"
-# ) |>
-#   mutate(with_depth = grepl("covariate", model)) |>
-#   mutate(type = gsub(" covariate", "", model))
-#
-# p1 |>
-#   left_join(select(d, year, sampled_region) %>% distinct()) |>
-#   ggplot(aes(year, est)) +
-#   geom_line() +
-#   facet_grid(with_depth ~ type) +
-#   geom_point(aes(colour = sampled_region)) +
-#   ggsidekick::theme_sleek()
+.ggsave("example-indices-simulated", width = 8.5, height = 5.5)
 
 # What about MRE, RMSE, see-saw, coverage etc. ? --------------------------
 
@@ -158,10 +134,10 @@ names(out_df)
 # lbls <- c("Both regions every year, (same effort)", "Base")
 lbls <- c("Base")
 out_df |>
-  filter(label %in% lbls) |> 
-  mutate(lwr_0.25 = exp(log_est - qnorm(0.75) * se)) |> 
-  mutate(upr_0.75 = exp(log_est + qnorm(0.75) * se)) |> 
-  mutate(odd_year = year %in% seq(1, 99, 2)) |> 
+  filter(label %in% lbls) |>
+  mutate(lwr_0.25 = exp(log_est - qnorm(0.75) * se)) |>
+  mutate(upr_0.75 = exp(log_est + qnorm(0.75) * se)) |>
+  mutate(odd_year = year %in% seq(1, 99, 2)) |>
   mutate(log_residual = log(total) - log(est)) |>
   group_by(seed, model, label) |>
   summarise(
@@ -184,7 +160,7 @@ out_df |>
     cols = -c(seed, model, label, mean_seesaw_index, mean_rmse),
     names_to = "metric"
   ) |>
-  filter(metric != "mre") |> 
+  filter(metric != "mre") |>
   mutate(metric = replace_values(metric,
     "seesaw_index" ~ "Seesaw index",
     "rmse" ~ "RMSE",
@@ -225,7 +201,7 @@ is_odd <- function(x) x %% 2 != 0
 lu$odd <- is_odd(lu$year)
 
 temp <- out_df |>
-  left_join(lu) |> 
+  left_join(lu) |>
   group_by(label, seed, model) |>
   mutate(log_residual = log(total) - log(est)) |>
   summarise(
@@ -271,18 +247,18 @@ g
 g <- temp |>
   left_join(saw_tooth_ind) |>
   filter(metric != "mre") |>
-  mutate(metric = as.character(metric)) |> 
+  mutate(metric = as.character(metric)) |>
   mutate(metric = replace_values(metric,
     "seesaw_index" ~ "Seesaw metric",
     "coverage" ~ "CI coverage",
     "mean_se" ~ "Mean SE",
     "rmse" ~ "RMSE"
-  )) |> 
+  )) |>
   mutate(metric = factor(metric,
     levels = c("Seesaw metric", "RMSE", "Mean SE", "CI coverage")
   )) |>
   mutate(label = gsub("obs", "\\\nobs", label)) |>
-  filter(!model %in% c("SVC trend, spatial only", "SVC trend, IID fields")) |> 
+  filter(!model %in% c("SVC trend, spatial only", "SVC trend, IID fields")) |>
   ggplot(aes(x = forcats::fct_reorder(model, med_st_index), y = med, group = label)) +
   geom_point(pch = 21, position = position_dodge(width = 0.2), alpha = 0.5) +
   # geom_linerange(aes(ymin = lwr, ymax = upr), position = position_dodge(width = 0.5)) +
@@ -297,16 +273,16 @@ g
 # ----------------------
 
 temp <- out_df |>
-  left_join(lu) |> 
-  filter(model == "IID RF, factor(year)") |> 
+  left_join(lu) |>
+  filter(model == "IID RF, factor(year)") |>
   group_by(label, model, seed) |>
   mutate(log_residual = log(total) - log(est)) |>
   summarise(
     seesaw_index = abs(mean(log_residual[odd]) - mean(log_residual[!odd]))
   ) |>
-  group_by(seed) |> 
-  mutate(seesaw_index = seesaw_index / seesaw_index[label == "Base"]) |> 
-  ungroup() |> 
+  group_by(seed) |>
+  # mutate(seesaw_index = seesaw_index / seesaw_index[label == "Base"]) |>
+  ungroup() |>
   group_by(label, model) |>
   summarize(
     lwr = quantile(seesaw_index, 0.2, na.rm=TRUE),
@@ -325,7 +301,8 @@ temp |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey95"), axis.title.y.left = element_blank()) +
   xlab("Seesaw metric")
-.ggsave("saw-tooth-bad-iid", width = 4.4, height = 4.5)
+# .ggsave("saw-tooth-bad-iid", width = 4.4, height = 4.5)
+.ggsave("saw-tooth-bad-iid-abs", width = 4.4, height = 4.5)
 
 # convergence?
 

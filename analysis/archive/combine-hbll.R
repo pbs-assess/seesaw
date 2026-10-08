@@ -1,0 +1,21 @@
+spp_to_fit_hbll <- c(
+  "rougheye/blackspotted rockfish",
+  "china rockfish",
+  "copper rockfish",
+  "redbanded rockfish",
+  "north pacific spiny dogfish",
+  "tiger rockfish",
+  "lingcod",
+  "canary rockfish",
+  "quillback rockfish",
+  "shortspine thornyhead",
+  "yelloweye rockfish",
+  "silvergray rockfish",
+  "spotted rockfish",
+  "big skate",
+  "rosethorn rockfish",
+  "souther rock sole",
+  "longnose skate",
+  "pacific cod",
+  "arrowtooth flounder"
+)

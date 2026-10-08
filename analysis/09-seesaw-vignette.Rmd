@@ -1,0 +1,418 @@
+---
+title: Walleye Pollock in BC case study
+author: Sean C. Anderson
+---
+
+Load libraries:
+
+```{r}
+library(sdmTMB)
+library(ggplot2)
+theme_set(theme_light())
+library(dplyr)
+```
+
+Load survey data and survey grid:
+
+```{r}
+surveyjoin::cache_data()
+surveyjoin::load_sql_data()
+
+dat <- surveyjoin::get_data("walleye pollock", regions = "pbs") |>
+  mutate(year = lubridate::year(lubridate::ymd(date))) |>
+  select(survey_name, year, lon_start, lat_start, depth_m, effort, catch_weight, common_name)
+dat <- sdmTMB::add_utm_columns(dat, ll_names = c("lon_start", "lat_start"), utm_crs = 3156)
+table(dat$survey_name, dat$year)
+dat <- dat |>
+  # Use only complete N/S sampling years
+  filter(!(year %in% c(2003, 2004, 2020))) |>
+  tidyr::drop_na(effort, catch_weight, depth_m) |>
+  # Drop these surveys to be perfectly bienniel
+  filter(!(year == 2007 & survey_name == "SYN WCHG")) |>
+  filter(!(year == 2021 & survey_name == "SYN WCVI"))
+table(dat$survey_name, dat$year)
+
+grid <- surveyjoin::dfo_synoptic_grid |>
+  sdmTMB::replicate_df("year", unique(dat$year))
+grid <- sdmTMB::add_utm_columns(grid, c("lon", "lat"), utm_crs = 3156)
+
+map_data <- rnaturalearth::ne_countries(
+  scale = "large",
+  returnclass = "sf", country = "canada")
+bc_coast <- suppressWarnings(suppressMessages(
+  sf::st_crop(map_data,
+    c(xmin = -134, ymin = 46, xmax = -120, ymax = 57))))
+bc_coast <- sf::st_transform(bc_coast, crs = 3156)
+```
+
+```{r}
+table(dat$survey_name, dat$year)
+```
+
+We can visualize the raw survey data:
+
+```{r raw-data-plot}
+.xlim <- range(dat$X * 1000)
+.ylim <- range(dat$Y * 1000)
+pos_dat <- filter(dat, catch_weight > 0)
+zero_dat <- filter(dat, catch_weight == 0)
+
+ggplot() +
+  geom_sf(data = bc_coast) +
+  geom_point(data = zero_dat,
+    mapping = aes(X * 1000, Y * 1000),
+    pch = 4,
+    alpha = 0.8,
+    colour = "grey40"
+  ) +
+  geom_point(data = pos_dat,
+    mapping = aes(X * 1000, Y * 1000,
+      size = catch_weight / effort,
+      colour = catch_weight / effort),
+    pch = 21,
+    alpha = 0.9
+  ) +
+  facet_wrap(~year) +
+  scale_colour_viridis_c(trans = "log10") +
+  scale_size_area(max_size = 8) +
+  coord_sf(xlim = .xlim, ylim = .ylim) +
+  labs(colour = "Catch (kg) per ha", size = "Catch (kg) per ha") +
+  xlab("Longitude (°)") + ylab("Latitude (°)")
+```
+
+Set up a finite-element mesh to implement the SPDE approach:
+
+```{r mesh}
+mesh <- make_mesh(dat, c("X", "Y"), cutoff = 15)
+plot(mesh)
+```
+
+We'll initialize an empty list to store our model fits:
+
+```{r fits-list}
+fits <- list()
+```
+
+First, we'll fit a standard spatiotemporal model with independent year effects, a spatial GMRF, and independent spatiotemporal GMRFs:
+
+```{r fit1}
+fits[[1]] <- sdmTMB(
+  catch_weight ~ 0 + factor(year),
+  data = dat,
+  mesh = mesh,
+  offset = log(dat$effort),
+  family = delta_gamma(type = "poisson-link"),
+  time = "year",
+  spatial = "on",
+  spatiotemporal = "iid",
+  share_range = TRUE,
+  anisotropy = TRUE,
+  silent = FALSE
+)
+names(fits)[[1]] <- "IID RF, factor(year)"
+```
+
+We can inspect this model with some basic diagnostics:
+
+```{r print}
+print(fits[[1]])
+```
+
+```{r sanity}
+sanity(fits[[1]])
+```
+
+```{r anisoplot}
+plot_anisotropy(fits[[1]])
+```
+
+```{r dharma}
+set.seed(1)
+simulate(fits[[1]], nsim = 200, type = "mle-mvn") |>
+  dharma_residuals(fits[[1]])
+```
+
+We can calculate a relative biomass index from this model fit by predicting from our model onto the survey grid each year and summing predicting density across the domain:
+
+```{r index0}
+pred <- predict(fits[[1]], newdata = grid, return_tmb_obj = TRUE)
+ind <- get_index(pred)
+```
+
+Make a look-up table to keep track of even years for plotting:
+
+```{r}
+lu <- data.frame(year = sort(unique(dat$year)))
+lu$even <- lu$year %% 2 == 0
+lu$survey_group <- ifelse(lu$even, "WCHG + WCVI", "QCS + HS")
+```
+
+```{r}
+ind |>
+  left_join(lu) |>
+  ggplot(aes(year, est, ymin = lwr, ymax = upr)) +
+  geom_ribbon(fill = "grey90") +
+  geom_linerange(aes(colour = survey_group)) +
+  geom_point(aes(colour = survey_group), size = 2) +
+  scale_colour_brewer(palette = "Dark2") +
+  ylab("Biomass index") + xlab("Year") + labs(colour = "Survey\ngrouping")
+
+```
+
+Next, we'll fit a sequence of alternative models
+
+```{r}
+fits[[2]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "rw"
+)
+names(fits)[[2]] <- "RW RF"
+```
+
+```{r}
+fits[[3]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "ar1"
+)
+names(fits)[[3]] <- "AR1 RF"
+```
+
+```{r}
+fits[[4]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "rw",
+  time_varying = ~ 1,
+  time_varying_type = "rw0",
+  priors = sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5))
+)
+names(fits)[[4]] <- "RW RF, RW year"
+```
+
+```{r}
+fits[[5]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "ar1",
+  time_varying = ~ 1,
+  time_varying_type = "rw0",
+  priors = sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5))
+)
+names(fits)[[5]] <- "AR1 RF, RW year"
+```
+
+```{r}
+fits[[6]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "iid",
+  time_varying = ~ 1,
+  time_varying_type = "rw0",
+  priors = sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5))
+)
+names(fits)[[6]] <- "IID RF, RW year"
+```
+
+```{r}
+fits[[7]] <- update(
+  fits[[1]],
+  formula. = . ~ 1,
+  spatiotemporal = "off",
+  time_varying = ~ 1,
+  time_varying_type = "rw0",
+  priors = sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5))
+)
+names(fits)[[7]] <- "Spatial only, RW year"
+```
+
+Iterate through our fits to grab the biomass index:
+
+```{r}
+future::plan(future::multisession, workers = 2L)
+indexes <- furrr::future_map_dfr(fits, \(x) {
+  pred <- predict(x, newdata = grid, return_tmb_obj = TRUE)
+  get_index(pred)
+}, .id = "model", .options = furrr::furrr_options(seed = TRUE))
+future::plan(future::sequential)
+```
+
+```{r}
+saveRDS(indexes, file = "data-generated/bc-indexes-lingcod.rds")
+indexes <- readRDS("data-generated/bc-indexes-lingcod.rds")
+```
+
+
+```{r}
+indexes |>
+  left_join(lu) |>
+  ggplot(aes(year, est, ymin = lwr, ymax = upr)) +
+  geom_ribbon(fill = "grey90") +
+  geom_linerange(aes(colour = survey_group)) +
+  geom_point(aes(colour = survey_group), size = 2) +
+  scale_colour_brewer(palette = "Dark2") +
+  facet_wrap(~model) +
+  ylab("Biomass index") + xlab("Year") + labs(colour = "Survey\ngrouping")
+```
+
+Test for seesaw index on these time series:
+
+```{r}
+period2_metric <- function(x, year = seq_along(x), conf = 0.95) {
+  stopifnot(
+    length(x) == length(year),
+    all(x > 0)
+  )
+
+  y <- log(x)
+
+  # Alternating survey phases, coded so beta is the phase difference
+  phase <- ifelse(year %% 2 == 0, 0.5, -0.5)
+  # period2 <- (-1)^year
+
+  fit <- lm(y ~ year + phase)
+
+  beta <- coef(fit)[["phase"]]
+  beta_se <- coef(summary(fit))["phase", "Std. Error"]
+  ci <- confint(fit, "phase", level = conf)
+  A_fun <- \(b) 100 * (exp(abs(b)) - 1)
+  A_ci <- A_fun(ci)
+  A_bounds <- if (ci[1L] <= 0 && ci[2L] >= 0) {
+    c(0, max(A_ci))
+  } else {
+    range(A_ci)
+  }
+
+  c(
+    beta = beta,
+    beta_se = beta_se,
+    beta_lower = ci[1L],
+    beta_upper = ci[2L],
+    A = A_fun(beta),
+    A_lower = A_bounds[1L],
+    A_upper = A_bounds[2L]
+  )
+}
+
+moving_window <- function(x, year, window = 10L, ...) {
+  n <- length(x)
+
+  out <- lapply(seq_len(n - window + 1L), function(i) {
+    ind <- i:(i + window - 1L)
+
+    res <- period2_metric(
+      x = x[ind],
+      year = year[ind],
+      ...
+    )
+
+    data.frame(
+      start = year[ind[1L]],
+      end = year[ind[length(ind)]],
+      t(res)
+    )
+  })
+
+  do.call(rbind, out)
+}
+```
+
+```{r}
+seesaw_indexes <- indexes |>
+  arrange(model, year) |>
+  group_by(model) |>
+  group_modify(\(.x, .y) {
+    moving_window(.x$est, year = .x$year, window = 8L)
+  }) |>
+  ungroup()
+```
+
+```{r}
+seesaw_indexes |>
+  mutate(year = end) |>
+  ggplot(aes(year, exp(beta))) +
+  geom_hline(yintercept = 1, lty = 2) +
+  geom_linerange(aes(x = year, ymin = exp(beta_lower), ymax = exp(beta_upper))) +
+  geom_point() +
+  facet_wrap(~model) +
+  xlab("Year") +
+  ylab("Beta seesaw effect") +
+  scale_y_log10()
+
+seesaw_indexes |>
+  mutate(year = end) |>
+  ggplot(aes(year, A)) +
+  geom_linerange(aes(x = year, ymin = A_lower, ymax = A_upper)) +
+  geom_point() +
+  facet_wrap(~model) +
+  xlab("Year") +
+  scale_y_continuous(expand = c(0, NA)) +
+  ylab("A seesaw effect")
+
+seesaw_indexes |>
+  group_by(model) |>
+  slice_max(A, n = 1L, with_ties = FALSE) |>
+  ungroup() |>
+  mutate(model = reorder(model, A)) |>
+  ggplot(aes(y = model)) +
+  geom_linerange(aes(xmin = A_lower, xmax = A_upper), orientation = "y") +
+  geom_point(aes(x = A)) +
+  scale_x_continuous(expand = c(0, NA)) +
+  xlab("Maximum A seesaw effect") +
+  ylab("Model")
+```
+
+## Check influence of the random walk prior
+
+```{r}
+prior_grid <- tidyr::crossing(
+  mean = c(0.1, 0.3, 0.6),
+  cv = c(0.2, 0.5, 1)
+) |>
+  mutate(prior = paste0("mean = ", mean, ", CV = ", cv))
+
+prior_indexes <- purrr::map_dfr(seq_len(nrow(prior_grid)), \(i) {
+  fit <- update(
+    fits[["IID RF, RW year"]],
+    priors = sdmTMBpriors(
+      sigma_V = gamma_cv(prior_grid$mean[[i]], prior_grid$cv[[i]])
+    )
+  )
+  pred <- predict(fit, newdata = grid, return_tmb_obj = TRUE)
+  get_index(pred) |>
+    mutate(prior = prior_grid$prior[[i]])
+})
+
+prior_indexes <- prior_indexes |>
+  tidyr::extract(
+    prior,
+    into = c("prior_mean", "prior_cv"),
+    regex = "mean = ([0-9.]+), CV = ([0-9.]+)",
+    convert = TRUE,
+    remove = FALSE
+  ) |>
+    mutate(prior_mean = paste("Mean =", prior_mean)) |>
+    mutate(prior_cv = paste("CV =", prior_cv))
+
+ggplot(prior_indexes, aes(year, est, group = prior)) +
+  geom_line(data = filter(prior_indexes, prior == "mean = 0.3, CV = 0.5") |> select(year, est), colour = "black", inherit.aes = FALSE, mapping = aes(x = year, y = est)) +
+  geom_line(colour = "red") +
+  facet_grid(prior_mean ~ prior_cv) +
+  labs(
+    x = "Year",
+    y = "Abundance index"
+  )
+```
+
+I think I worked out a nice seesaw metric that works equally for the simulated and real data. This is for walleye pollock BC wide. The below function and then use a moving window. The beta coefficient here is the average difference in log space between the even and odd years after a linear detrending (the 'year' coef). So, exp(beta) gives you the fold difference. E.g., in this plot, 0.5 (same as 2 if flipped), means the odd and even years are on average 2 times different in that window. This example is extreme.
+
+
+it's nice because you can also apply it to the simulated data by working with the estimated minus true values (residuals) without the detrending part - in fact, it works out to the same thing I was doing with the simulated data, just not in lm() form
+because it's fit as a model, you get a CI that helps tell you if you have 'significant' seesawing happening
+you could use s(year) if you wanted a non-linear detrending, but for 8-10 years that seems overkill here
+
+I'm also slowly converging on the thinking that we should probably have time_varying intercepts in these models, not just random walk random fields on their own. They seem to do a pretty good job --- they just need a prior to help convergence. Whether the fields should be IID or RW may depend more on the intended purpose.
+[4:18 PM]maybe IID fields for things like stock assessment and RW fields for things like SOPO where we are happy to smooth through the pattern and induce more year-to-year correlation
+[4:19 PM]I was writing the methods, and writing always makes you think more about these things
+[4:20 PM]and as long as the gamma prior on the time-varying SD has a wide enough CV it doesn't seem too influential
