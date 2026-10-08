@@ -1,0 +1,150 @@
+# HBLL OUT (N and S) version of 03-fit-bc-models.R
+# N and S alternate years, but the alternation flips calendar-year parity
+# after the 2013 gap (N: 2006-2012 even, 2015-2025 odd), so the seesaw phase
+# is coded by region rather than by year parity.
+
+library(sdmTMB)
+library(ggplot2)
+library(dplyr)
+
+source(here::here("analysis/fit-index-models.R"))
+source(here::here("analysis/metric-functions.R"))
+
+hbll_surveys <- c("HBLL OUT N", "HBLL OUT S")
+
+# Cache the HBLL OUT subset of the gfsynopsis-2025 data pull
+sets_file <- here::here("data-raw/hbll-out-sets.rds")
+if (!file.exists(sets_file)) {
+  readRDS("~/src/gfsynopsis-2025/report/data-cache-2026-07/survey-sets.rds") |>
+    filter(survey_abbrev %in% hbll_surveys) |>
+    select(
+      species_common_name, survey_abbrev, year, fishing_event_id,
+      longitude, latitude, depth_m, lglsp_hook_count, count_bait_only, catch_count
+    ) |>
+    saveRDS(sets_file)
+}
+# Hook competition adjustment as in gfsynopsis-2025 (prep_stitch_dat()):
+# offset = log(hooks / adjust), adjust = -log(p) / (1 - p), p = prop. baited hooks
+sets <- readRDS(sets_file) |>
+  tidyr::drop_na(lglsp_hook_count, count_bait_only, depth_m, catch_count) |>
+  mutate(
+    count_bait_only = replace(count_bait_only, count_bait_only == 0, 1),
+    prop_bait_hooks = count_bait_only / lglsp_hook_count,
+    hook_adjust_factor = -log(prop_bait_hooks) / (1 - prop_bait_hooks),
+    offset = log(lglsp_hook_count / hook_adjust_factor)
+  ) |>
+  filter(is.finite(offset))
+
+grid0 <- bind_rows(
+  gfplot::hbll_n_grid$grid |> mutate(survey_abbrev = "HBLL OUT N"),
+  gfplot::hbll_s_grid$grid |> mutate(survey_abbrev = "HBLL OUT S")
+) |>
+  rename(lon = X, lat = Y, depth_m = depth) |>
+  mutate(area = gfplot::hbll_n_grid$cell_area) |>
+  sdmTMB::add_utm_columns(c("lon", "lat"), utm_crs = 3156)
+
+do_fit_hbll <- function(.sp) {
+  RhpcBLASctl::blas_set_num_threads(1L)
+  RhpcBLASctl::omp_set_num_threads(1L)
+
+  dat <- sets |>
+    filter(species_common_name == .sp) |>
+    sdmTMB::add_utm_columns(c("longitude", "latitude"), utm_crs = 3156)
+
+  grid <- grid0 |>
+    clamp_depth(dat) |>
+    sdmTMB::replicate_df("year", sort(unique(dat$year)))
+
+  mesh <- make_mesh(dat, c("X", "Y"), cutoff = 10)
+
+  fit_index_models(
+    dat = dat,
+    grid = grid,
+    mesh = mesh,
+    response = "catch_count",
+    family = list(nbinom1(), nbinom2()),
+    offset = dat$offset
+  ) |>
+    mutate(species = .sp)
+}
+
+spp_to_fit_hbll <- c(
+  "rougheye/blackspotted rockfish complex",
+  "china rockfish",
+  "copper rockfish",
+  "north pacific spiny dogfish",
+  "tiger rockfish",
+  "lingcod",
+  "canary rockfish",
+  "quillback rockfish",
+  "yelloweye rockfish",
+  "silvergray rockfish",
+  "spotted ratfish",
+  "big skate",
+  "rosethorn rockfish",
+  "southern rock sole",
+  "longnose skate",
+  "pacific cod",
+  "arrowtooth flounder",
+  "pacific halibut"
+)
+stopifnot(all(spp_to_fit_hbll %in% sets$species_common_name))
+
+RhpcBLASctl::blas_set_num_threads(1L)
+RhpcBLASctl::omp_set_num_threads(1L)
+
+future::plan(future::multisession, workers = min(c(length(spp_to_fit_hbll), future::availableCores())))
+out <- furrr::future_map_dfr(spp_to_fit_hbll, do_fit_hbll, .options = furrr::furrr_options(seed = TRUE))
+future::plan(future::sequential)
+saveRDS(out, file = here::here("data-generated/hbll-indexes.rds"))
+#
+out <- readRDS(here::here("data-generated/hbll-indexes.rds"))
+
+# Which region was sampled in each year; +0.5 = N, -0.5 = S
+lu <- sets |>
+  distinct(year, survey_abbrev) |>
+  mutate(phase = ifelse(survey_abbrev == "HBLL OUT N", 0.5, -0.5))
+stopifnot(!any(duplicated(lu$year)))
+
+seesaw_window <- 10L
+seesaw_mw <- out |>
+  left_join(lu, by = "year") |>
+  arrange(species, model, year) |>
+  group_by(species, model) |>
+  group_modify(\(.x, .y) moving_window(.x$est, year = .x$year, window = seesaw_window, phase = .x$phase)) |>
+  ungroup()
+
+seesaw_summary <- seesaw_mw |>
+  summarise(mean_A = mean(A), max_A = max(A), .by = c(species, model))
+
+out |>
+  left_join(lu, by = "year") |>
+  left_join(seesaw_summary, by = c("species", "model")) |>
+  group_by(species, model) |>
+  mutate(geomean = exp(mean(log(est))), est = est / geomean, lwr = lwr / geomean, upr = upr / geomean) |>
+  ggplot(aes(year, log(est), ymin = log(lwr), ymax = log(upr))) +
+  geom_ribbon(fill = "grey90") +
+  geom_linerange(aes(colour = survey_abbrev)) +
+  geom_point(aes(colour = survey_abbrev)) +
+  scale_colour_brewer(palette = "Dark2") +
+  facet_grid(forcats::fct_reorder(model, mean_A) ~ species) +
+  ylab("Abundance index") +
+  xlab("Year") +
+  labs(colour = "Survey") +
+  ggsidekick::theme_sleek()
+ggsave(here::here("figs/hbll-testing.pdf"), width = 30, height = 15)
+
+a_lab <- paste0("Estimated biennial amplitude (%)\nacross ", seesaw_window, "-survey windows")
+blue <- RColorBrewer::brewer.pal(8, "Blues")[3]
+seesaw_mw |>
+  mutate(model = reorder(model, A, FUN = mean)) |>
+  ggplot(aes(model, A)) +
+  coord_flip(ylim = c(0, 200)) +
+  geom_violin(scale = "width", colour = blue, fill = blue) +
+  geom_point(position = position_jitter(width = 0.1), colour = "grey25", alpha = 0.3) +
+  geom_point(stat = "summary", fun = mean, colour = "black") +
+  scale_y_sqrt(limits = c(0, NA), expand = expansion(mult = c(0, 0.05))) +
+  ylab(a_lab) +
+  ggsidekick::theme_sleek() +
+  theme(axis.title.y = element_blank(), panel.grid.major = element_line(colour = "grey90", linewidth = 0.3), panel.grid.minor = element_line(colour = "grey90", linewidth = 0.3))
+ggsave(here::here("figs/hbll-A-moving-window.pdf"), width = 5, height = 3.5)

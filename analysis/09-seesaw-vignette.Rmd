@@ -95,7 +95,7 @@ fits <- list()
 
 First, we'll fit a standard spatiotemporal model with independent year effects, a spatial GMRF, and independent spatiotemporal GMRFs:
 
-```{r fit1}
+```{r fit1, results="hide"}
 fits[[1]] <- sdmTMB(
   catch_weight ~ 0 + factor(year),
   data = dat,
@@ -134,9 +134,8 @@ simulate(fits[[1]], nsim = 200, type = "mle-mvn") |>
 
 We can calculate a relative biomass index from this model fit by predicting from our model onto the survey grid each year and summing predicting density across the domain:
 
-```{r index0}
-pred <- predict(fits[[1]], newdata = grid, return_tmb_obj = TRUE)
-ind <- get_index(pred)
+```{r index0, message=FALSE}
+ind <- get_index(fits[[1]], newdata = grid)
 ```
 
 Make a look-up table to keep track of even years for plotting:

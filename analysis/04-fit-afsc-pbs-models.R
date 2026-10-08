@@ -84,7 +84,7 @@ do_fit <- function(.sp, .survey) {
       mutate(year = lubridate::year(lubridate::ymd(date))) |>
       select(survey_name, year, lon_start, lat_start, depth_m, effort, catch_weight, common_name) |>
       tidyr::drop_na(lon_start, lat_start) |>
-      filter(survey_name %in% c("Gulf of Alaska", "SYN HS", "SYN QCS", "SYN WCHG", "SYN WCVI")) |> 
+      filter(survey_name %in% c("Gulf of Alaska", "SYN HS", "SYN QCS", "SYN WCHG", "SYN WCVI")) |>
       filter(year >= 2003) # PBS surveys start
 
     dat0 <- sdmTMB::add_utm_columns(dat0, ll_names = c("lon_start", "lat_start"), utm_crs = 3156)
@@ -343,7 +343,7 @@ x <- out |>
 
 out$survey_group <- out$even
 out |>
-  # filter(!species %in% "pacific spiny dogfish") |> 
+  # filter(!species %in% "pacific spiny dogfish") |>
   left_join(x) |>
   group_by(species, model) |>
   mutate(geomean = exp(mean(log(est))), est = est / geomean, lwr = lwr / geomean, upr = upr / geomean) |>
