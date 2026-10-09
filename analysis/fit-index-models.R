@@ -38,7 +38,9 @@ clamp_depth <- function(grid, dat, depth_col = "depth_m") {
 #'   `"factor(survey_group)"`) kept in every model. Columns must be in `dat`.
 #' @param all_data Optional list(data, mesh, offset) for the "all data" models,
 #'   which also need a `survey_name` column.
-fit_index_models <- function(dat, grid, mesh, response, family, offset, covariates = NULL, all_data = NULL) {
+#' @param control [sdmTMB::sdmTMBcontrol()] list used for all models.
+fit_index_models <- function(dat, grid, mesh, response, family, offset, covariates = NULL, all_data = NULL,
+                             control = sdmTMB::sdmTMBcontrol()) {
   all_yrs <- seq(min(dat$year), max(dat$year))
   base_formula <- stats::as.formula(paste(response, "~", paste(c("0 + factor(year)", covariates), collapse = " + ")))
   # RHS for models where the year effect is not a fixed factor
@@ -64,6 +66,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, covariat
       spatiotemporal = "iid",
       share_range = TRUE,
       anisotropy = TRUE,
+      control = .(control),
       silent = FALSE
     ))), error = \(e) NULL)
   }

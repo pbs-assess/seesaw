@@ -34,7 +34,10 @@ sets <- readRDS(sets_file) |>
     hook_adjust_factor = -log(prop_bait_hooks) / (1 - prop_bait_hooks),
     offset = log(lglsp_hook_count / hook_adjust_factor)
   ) |>
-  filter(is.finite(offset))
+  filter(is.finite(offset)) |>
+  mutate(species_common_name = replace(
+    species_common_name, species_common_name == "north pacific spiny dogfish", "pacific spiny dogfish"
+  ))
 
 grid0 <- bind_rows(
   gfplot::hbll_n_grid$grid |> mutate(survey_abbrev = "HBLL OUT N"),
@@ -73,7 +76,7 @@ spp_to_fit_hbll <- c(
   "rougheye/blackspotted rockfish complex",
   "china rockfish",
   "copper rockfish",
-  "north pacific spiny dogfish",
+  "pacific spiny dogfish",
   "tiger rockfish",
   "lingcod",
   "canary rockfish",
@@ -91,15 +94,21 @@ spp_to_fit_hbll <- c(
 )
 stopifnot(all(spp_to_fit_hbll %in% sets$species_common_name))
 
-RhpcBLASctl::blas_set_num_threads(1L)
-RhpcBLASctl::omp_set_num_threads(1L)
+# Delete the .rds to force a refit
+fits_file <- here::here("data-generated/hbll-indexes.rds")
+if (!file.exists(fits_file)) {
+  RhpcBLASctl::blas_set_num_threads(1L)
+  RhpcBLASctl::omp_set_num_threads(1L)
 
-future::plan(future::multisession, workers = min(c(length(spp_to_fit_hbll), future::availableCores())))
-out <- furrr::future_map_dfr(spp_to_fit_hbll, do_fit_hbll, .options = furrr::furrr_options(seed = TRUE))
-future::plan(future::sequential)
-saveRDS(out, file = here::here("data-generated/hbll-indexes.rds"))
-#
-out <- readRDS(here::here("data-generated/hbll-indexes.rds"))
+  future::plan(future::multisession, workers = min(c(length(spp_to_fit_hbll), future::availableCores())))
+  out <- furrr::future_map_dfr(spp_to_fit_hbll, do_fit_hbll, .options = furrr::furrr_options(seed = TRUE))
+  future::plan(future::sequential)
+  saveRDS(out, file = fits_file)
+}
+
+out <- readRDS(fits_file) |>
+  filter(!grepl("depth", model), model != "Spatial only, RW year") |>
+  mutate(species = replace(species, species == "north pacific spiny dogfish", "pacific spiny dogfish"))
 
 # Which region was sampled in each year; +0.5 = N, -0.5 = S
 lu <- sets |>
@@ -120,3 +129,10 @@ ggsave(here::here("figs/hbll-testing.pdf"), width = 30, height = 15)
 
 plot_A_moving_window(seesaw_mw, seesaw_window)
 ggsave(here::here("figs/hbll-A-moving-window.pdf"), width = 5, height = 3.5)
+
+plot_A_moving_window(seesaw_mw, seesaw_window, connect_stocks = TRUE, n_highlight = 5)
+ggsave(here::here("figs/hbll-A-moving-window-connected.pdf"), width = 5, height = 3.5)
+
+plot_top_stock_indexes(out, seesaw_mw, n_top = 5, models = c("IID RF, factor(year)", "IID RF, RW year", "RW RF"),
+  lu = lu, .ylab = "Centered abundance index")
+ggsave(here::here("figs/hbll-top-stock-indexes.pdf"), width = 6.2, height = 5)

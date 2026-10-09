@@ -86,15 +86,19 @@ spp_to_fit_syn <- c(
   "walleye pollock"
 )
 
-RhpcBLASctl::blas_set_num_threads(1L)
-RhpcBLASctl::omp_set_num_threads(1L)
+# Delete the .rds to force a refit
+fits_file <- here::here("data-generated/bc-indexes4.rds")
+if (!file.exists(fits_file)) {
+  RhpcBLASctl::blas_set_num_threads(1L)
+  RhpcBLASctl::omp_set_num_threads(1L)
 
-future::plan(future::multisession, workers = min(c(length(spp_to_fit_syn), future::availableCores() / 2)))
-out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit_syn, .options = furrr::furrr_options(seed = TRUE))
-future::plan(future::sequential)
-saveRDS(out, file = here::here("data-generated/bc-indexes4.rds"))
-#
-out <- readRDS(here::here("data-generated/bc-indexes4.rds")) |>
+  future::plan(future::multisession, workers = min(c(length(spp_to_fit_syn), future::availableCores() / 2)))
+  out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit_syn, .options = furrr::furrr_options(seed = TRUE))
+  future::plan(future::sequential)
+  saveRDS(out, file = fits_file)
+}
+
+out <- readRDS(fits_file) |>
   filter(!grepl("depth", model), model != "Spatial only, RW year")
   # filter(!species %in% c("redbanded rockfish", "shortspine thornyhead"))
 

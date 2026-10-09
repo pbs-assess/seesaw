@@ -125,7 +125,8 @@ plot_A_moving_window <- function(seesaw_mw, window, include_all_data = FALSE, co
 #'   reference model is always shown first.
 #' @param ref_model Reference model used to choose the stocks.
 plot_top_stock_indexes <- function(out, seesaw_mw, n_top = 6, ref_model = "IID RF, factor(year)",
-                                   include_all_data = FALSE, models = NULL) {
+                                   include_all_data = FALSE, models = NULL, lu = NULL,
+                                   .ylab = "Centered biomass index") {
   if (!include_all_data) {
     out <- filter(out, !grepl("all data", model))
     seesaw_mw <- filter(seesaw_mw, !grepl("all data", model))
@@ -156,16 +157,21 @@ plot_top_stock_indexes <- function(out, seesaw_mw, n_top = 6, ref_model = "IID R
     )
 
   # per stock, the year parity (even/odd) with the higher mean index in the
-  # reference model
+  # reference model; if `lu` (year, phase) is supplied, use its phase instead
+  if (is.null(lu)) {
+    dat <- mutate(dat, even = year %% 2 == 0)
+  } else {
+    dat <- left_join(dat, distinct(lu, year, phase), by = "year") |>
+      mutate(even = phase > 0)
+  }
   upper_parity <- dat |>
     filter(model == ref_model) |>
-    mutate(even = year %% 2 == 0) |>
     summarise(m = mean(log(est)), .by = c(species, even)) |>
     slice_max(m, n = 1, by = species) |>
     select(species, upper_even = even)
   dat <- dat |>
     left_join(upper_parity, by = "species") |>
-    mutate(upper = (year %% 2 == 0) == upper_even)
+    mutate(upper = even == upper_even)
 
   ggplot(dat, aes(year, est, ymin = lwr, ymax = upr)) +
     geom_ribbon(fill = "grey90") +
@@ -178,7 +184,7 @@ plot_top_stock_indexes <- function(out, seesaw_mw, n_top = 6, ref_model = "IID R
     facet_grid(species ~ model, scales = "free_y", labeller = labeller(species = \(x) label_wrap_gen(14)(tools::toTitleCase(x)))) +
     scale_y_log10() +
     scale_x_continuous(breaks = seq(2005, 2025, 5)) +
-    ylab("Centered biomass index") +
+    ylab(.ylab) +
     ggsidekick::theme_sleek() +
     theme(axis.title.x = element_blank(), panel.grid.major = element_line(colour = "grey90", linewidth = 0.3), panel.grid.minor = element_blank())
 }

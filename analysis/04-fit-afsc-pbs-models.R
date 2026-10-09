@@ -80,15 +80,19 @@ spp_to_fit_afsc_pbs <- c(
   "walleye pollock"
 )
 
-RhpcBLASctl::blas_set_num_threads(1L)
-RhpcBLASctl::omp_set_num_threads(1L)
+# Delete the .rds to force a refit
+fits_file <- here::here("data-generated/transboundary-afsc-pbs-indexes.rds")
+if (!file.exists(fits_file)) {
+  RhpcBLASctl::blas_set_num_threads(1L)
+  RhpcBLASctl::omp_set_num_threads(1L)
 
-future::plan(future::multisession, workers = min(c(length(spp_to_fit_afsc_pbs), future::availableCores() / 2)))
-out <- furrr::future_map_dfr(spp_to_fit_afsc_pbs[1], do_fit_afsc_pbs, .options = furrr::furrr_options(seed = TRUE))
-future::plan(future::sequential)
-saveRDS(out, file = here::here("data-generated/transboundary-afsc-pbs-indexes.rds"))
+  future::plan(future::multisession, workers = min(c(length(spp_to_fit_afsc_pbs), future::availableCores() / 2)))
+  out <- furrr::future_map_dfr(spp_to_fit_afsc_pbs, do_fit_afsc_pbs, .options = furrr::furrr_options(seed = TRUE))
+  future::plan(future::sequential)
+  saveRDS(out, file = fits_file)
+}
 
-out <- readRDS(here::here("data-generated/transboundary-afsc-pbs-indexes.rds")) |>
+out <- readRDS(fits_file) |>
   filter(!grepl("depth", model), model != "Spatial only, RW year")
 
 # Phase is coded by calendar year: even vs odd
