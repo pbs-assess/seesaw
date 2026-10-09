@@ -26,40 +26,40 @@ do_fit_syn <- function(.sp) {
   RhpcBLASctl::omp_set_num_threads(1L)
 
   dat0 <- surveyjoin::get_data(.sp, regions = "pbs") |>
-    mutate(year = lubridate::year(lubridate::ymd(date))) |>
-    select(survey_name, year, lon_start, lat_start, depth_m, effort, catch_weight, common_name)
+    dplyr::mutate(year = lubridate::year(lubridate::ymd(date))) |>
+    dplyr::select(survey_name, year, lon_start, lat_start, depth_m, effort, catch_weight, common_name)
 
   dat0 <- sdmTMB::add_utm_columns(dat0, ll_names = c("lon_start", "lat_start"), utm_crs = 3156)
   dat <- dat0 |>
     # Use only complete N/S sampling years
-    filter(!(year %in% c(2003, 2004, 2020))) |>
+    dplyr::filter(!(year %in% c(2003, 2004, 2020))) |>
     tidyr::drop_na(effort, catch_weight, depth_m) |>
     # Drop these surveys to be perfectly bienniel
-    filter(!(year == 2007 & survey_name == "SYN WCHG")) |>
-    filter(!(year == 2021 & survey_name == "SYN WCVI"))
+    dplyr::filter(!(year == 2007 & survey_name == "SYN WCHG")) |>
+    dplyr::filter(!(year == 2021 & survey_name == "SYN WCVI"))
 
   dat_all <- dat0 |>
     tidyr::drop_na(effort, catch_weight, depth_m)
 
   grid <- surveyjoin::dfo_synoptic_grid |>
     sdmTMB::add_utm_columns(c("lon", "lat"), utm_crs = 3156) |>
-    mutate(survey_name = "SYN WCVI") |>
+    dplyr::mutate(survey_name = "SYN WCVI") |>
     clamp_depth(dat) |>
     sdmTMB::replicate_df("year", sort(unique(dat$year)))
 
-  mesh <- make_mesh(dat, c("X", "Y"), cutoff = 10)
-  mesh_all <- make_mesh(dat_all, c("X", "Y"), mesh = mesh$mesh)
+  mesh <- sdmTMB::make_mesh(dat, c("X", "Y"), cutoff = 10)
+  mesh_all <- sdmTMB::make_mesh(dat_all, c("X", "Y"), mesh = mesh$mesh)
 
   fit_index_models(
     dat = dat,
     grid = grid,
     mesh = mesh,
     response = "catch_weight",
-    family = delta_gamma(type = "poisson-link"),
+    family = sdmTMB::delta_gamma(type = "poisson-link"),
     offset = log(dat$effort),
     all_data = list(data = dat_all, mesh = mesh_all, offset = log(dat_all$effort))
   ) |>
-    mutate(species = .sp)
+    dplyr::mutate(species = .sp)
 }
 
 spp_to_fit_syn <- c(
