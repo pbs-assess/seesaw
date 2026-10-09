@@ -57,7 +57,7 @@ sanitize_scenario_name <- function(x) {
 
 # Set to TRUE to fit only the model that produces the seesaw (IID fields +
 # factor(year)), e.g., to diagnose which scenarios drive it:
-seesaw_only <- FALSE
+seesaw_only <- TRUE
 models_to_fit <- if (seesaw_only) "IID RF, factor(year)" else NULL
 
 run_name <- if (seesaw_only) "sawtooth-sim-oct09-seesaw-only" else "sawtooth-sim-oct09"
@@ -66,7 +66,7 @@ cache_dir <- file.path("data-generated", paste0(run_name, "-cache"))
 dir.create("data-generated", showWarnings = FALSE)
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 
-seeds <- seq_len(15)
+seeds <- seq_len(50L)
 scenario_slugs <- make.unique(vapply(names(sc), sanitize_scenario_name, character(1)), sep = "-dup-")
 tasks <- tidyr::crossing(
   seed = seeds,
