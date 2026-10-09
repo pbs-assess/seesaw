@@ -34,11 +34,18 @@ clamp_depth <- function(grid, dat, depth_col = "depth_m") {
 #'   model is fit with each and the family of the converged fit with the
 #'   lowest AIC (or lowest AIC overall if none converge) is used for all models.
 #' @param offset Offset vector (already logged) for `dat`.
+#' @param covariates Optional character vector of extra RHS terms (e.g.
+#'   `"factor(survey_group)"`) kept in every model. Columns must be in `dat`.
 #' @param all_data Optional list(data, mesh, offset) for the "all data" models,
 #'   which also need a `survey_name` column.
-fit_index_models <- function(dat, grid, mesh, response, family, offset, all_data = NULL) {
+fit_index_models <- function(dat, grid, mesh, response, family, offset, covariates = NULL, all_data = NULL) {
   all_yrs <- seq(min(dat$year), max(dat$year))
-  base_formula <- stats::as.formula(paste(response, "~ 0 + factor(year)"))
+  base_formula <- stats::as.formula(paste(response, "~", paste(c("0 + factor(year)", covariates), collapse = " + ")))
+  # RHS for models where the year effect is not a fixed factor
+  no_year_formula <- stats::as.formula(paste(". ~", paste(c("1", covariates), collapse = " + ")))
+  depth_formula <- stats::as.formula(paste(
+    ". ~", paste(c("0 + factor(year)", covariates, "poly(log(depth_m), 2)"), collapse = " + ")
+  ))
   rw_prior <- sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5))
 
   # The base fit is the update() template for the other models, so keep it
@@ -50,7 +57,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, all_data
       .(base_formula),
       data = dat,
       mesh = mesh,
-      offset = offset,
+      offset = .(offset),
       family = .(family),
       time = "year",
       spatial = "on",
@@ -92,21 +99,21 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, all_data
 
   fits[["RW RF"]] <- fit_ok(update(
     template,
-    formula. = . ~ 1,
+    formula. = no_year_formula,
     spatiotemporal = "rw",
     extra_time = all_yrs
   ))
 
   fits[["AR1 RF"]] <- fit_ok(update(
     template,
-    formula. = . ~ 1,
+    formula. = no_year_formula,
     spatiotemporal = "ar1",
     extra_time = all_yrs
   ))
 
   fits[["RW RF, RW year"]] <- fit_ok(update(
     template,
-    formula. = . ~ 1,
+    formula. = no_year_formula,
     spatiotemporal = "rw",
     time_varying = ~1,
     time_varying_type = "rw0",
@@ -116,7 +123,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, all_data
 
   fits[["AR1 RF, RW year"]] <- fit_ok(update(
     template,
-    formula. = . ~ 1,
+    formula. = no_year_formula,
     spatiotemporal = "ar1",
     time_varying = ~1,
     time_varying_type = "rw0",
@@ -126,7 +133,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, all_data
 
   fits[["IID RF, RW year"]] <- fit_ok(update(
     template,
-    formula. = . ~ 1,
+    formula. = no_year_formula,
     spatiotemporal = "iid",
     time_varying = ~1,
     time_varying_type = "rw0",
@@ -136,7 +143,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, all_data
 
   fits[["Spatial only, RW year"]] <- fit_ok(update(
     template,
-    formula. = . ~ 1,
+    formula. = no_year_formula,
     spatiotemporal = "off",
     time_varying = ~1,
     time_varying_type = "rw0",
@@ -146,7 +153,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, all_data
 
   fits[["IID RF, factor(year), depth"]] <- fit_ok(update(
     template,
-    formula. = . ~ 0 + factor(year) + poly(log(depth_m), 2)
+    formula. = depth_formula
   ))
 
   purrr::compact(fits) |>
