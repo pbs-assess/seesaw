@@ -39,7 +39,7 @@ species_to_fit <- c(
   "lingcod",
   "shortspine thornyhead"
 )
-n_reps <- 10L
+n_reps <- 20L
 ci_levels <- c(0.5, 0.95)
 # Moving window (in survey occasions) for max A; as in
 # analysis/05-qcs-hs-experimental-biennial.R. With 11 occasions, 8 gives 4
