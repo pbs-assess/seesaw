@@ -9,6 +9,7 @@ library(dplyr)
 
 source(here::here("analysis/fit-index-models.R"))
 source(here::here("analysis/metric-functions.R"))
+source(here::here("analysis/plot-index-models.R"))
 
 hbll_surveys <- c("HBLL OUT N", "HBLL OUT S")
 
@@ -114,37 +115,8 @@ seesaw_mw <- out |>
   group_modify(\(.x, .y) moving_window(.x$est, year = .x$year, window = seesaw_window, phase = .x$phase)) |>
   ungroup()
 
-seesaw_summary <- seesaw_mw |>
-  summarise(mean_A = mean(A), max_A = max(A), .by = c(species, model))
-
-out |>
-  left_join(lu, by = "year") |>
-  left_join(seesaw_summary, by = c("species", "model")) |>
-  group_by(species, model) |>
-  mutate(geomean = exp(mean(log(est))), est = est / geomean, lwr = lwr / geomean, upr = upr / geomean) |>
-  ggplot(aes(year, log(est), ymin = log(lwr), ymax = log(upr))) +
-  geom_ribbon(fill = "grey90") +
-  geom_linerange(aes(colour = survey_abbrev)) +
-  geom_point(aes(colour = survey_abbrev)) +
-  scale_colour_brewer(palette = "Dark2") +
-  facet_grid(forcats::fct_reorder(model, mean_A) ~ species) +
-  ylab("Abundance index") +
-  xlab("Year") +
-  labs(colour = "Survey") +
-  ggsidekick::theme_sleek()
+plot_indexes(out, lu, seesaw_mw, colour = "survey_abbrev", .ylab = "Abundance index")
 ggsave(here::here("figs/hbll-testing.pdf"), width = 30, height = 15)
 
-a_lab <- paste0("Estimated biennial amplitude (%)\nacross ", seesaw_window, "-survey windows")
-blue <- RColorBrewer::brewer.pal(8, "Blues")[3]
-seesaw_mw |>
-  mutate(model = reorder(model, A, FUN = mean)) |>
-  ggplot(aes(model, A)) +
-  coord_flip(ylim = c(0, 200)) +
-  geom_violin(scale = "width", colour = blue, fill = blue) +
-  geom_point(position = position_jitter(width = 0.1), colour = "grey25", alpha = 0.3) +
-  geom_point(stat = "summary", fun = mean, colour = "black") +
-  scale_y_sqrt(limits = c(0, NA), expand = expansion(mult = c(0, 0.05))) +
-  ylab(a_lab) +
-  ggsidekick::theme_sleek() +
-  theme(axis.title.y = element_blank(), panel.grid.major = element_line(colour = "grey90", linewidth = 0.3), panel.grid.minor = element_line(colour = "grey90", linewidth = 0.3))
+plot_A_moving_window(seesaw_mw, seesaw_window)
 ggsave(here::here("figs/hbll-A-moving-window.pdf"), width = 5, height = 3.5)
