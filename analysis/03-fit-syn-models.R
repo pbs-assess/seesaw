@@ -95,7 +95,8 @@ future::plan(future::sequential)
 saveRDS(out, file = here::here("data-generated/bc-indexes4.rds"))
 #
 out <- readRDS(here::here("data-generated/bc-indexes4.rds")) |>
-  filter(!species %in% c("redbanded rockfish", "shortspine thornyhead"))
+  filter(!grepl("depth", model), model != "Spatial only, RW year")
+  # filter(!species %in% c("redbanded rockfish", "shortspine thornyhead"))
 
 # Phase is coded by calendar year: even = WCHG + WCVI, odd = QCS + HS
 lu <- distinct(out, year) |>
@@ -115,8 +116,16 @@ out |>
   group_by(model) |>
   summarise(n = n())
 
-plot_A_moving_window(seesaw_mw, seesaw_window)
-ggsave(here::here("figs/bc-trawl-A-moving-window.pdf"), width = 5, height = 3.5)
+# plot_A_moving_window(seesaw_mw, seesaw_window)
+# ggsave(here::here("figs/bc-trawl-A-moving-window.pdf"), width = 5, height = 3.5)
 
-plot_A_moving_window(seesaw_mw, seesaw_window, include_all_data = TRUE)
-ggsave(here::here("figs/bc-trawl-A-moving-window2.pdf"), width = 5.5, height = 3.5)
+# plot_A_moving_window(seesaw_mw, seesaw_window, include_all_data = TRUE)
+# ggsave(here::here("figs/bc-trawl-A-moving-window2.pdf"), width = 5.5, height = 3.5)
+
+source(here::here("analysis/plot-index-models.R"))
+plot_A_moving_window(seesaw_mw, seesaw_window, connect_stocks = TRUE, n_highlight = 5)
+ggsave(here::here("figs/bc-trawl-A-moving-window-connected.pdf"), width = 5, height = 3.5)
+
+source(here::here("analysis/plot-index-models.R"))
+plot_top_stock_indexes(out, seesaw_mw, n_top = 5, models = c("IID RF, factor(year)", "IID RF, RW year", "RW RF"))
+ggsave(here::here("figs/bc-trawl-top-stock-indexes.pdf"), width = 6.2, height = 5)
