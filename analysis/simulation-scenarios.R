@@ -124,15 +124,21 @@ sc[[i]]$year_marginal_sd <- 1.0
 i <- i + 1
 
 # Annual AR(1) correlation
+# Hold the year-to-year step SD at the base value so only the correlation
+# changes (holding the marginal SD fixed makes rho -> 1 nearly flat)
+
+base_year_step_sd <- base$year_marginal_sd * sqrt(1 - base$year_arima.sim$ar^2)
 
 sc[[i]]$label <- "Year AR(1) rho = 0"
 sc[[i]]$category <- "Annual correlation"
 sc[[i]]$year_arima.sim <- list(ar = 0)
+sc[[i]]$year_innovation_sd <- base_year_step_sd
 i <- i + 1
 
 sc[[i]]$label <- "Year AR(1) rho = 1"
 sc[[i]]$category <- "Annual correlation"
-sc[[i]]$year_arima.sim <- list(ar = 0.9999)
+sc[[i]]$year_arima.sim <- list(ar = 1)
+sc[[i]]$year_innovation_sd <- base_year_step_sd
 i <- i + 1
 
 # Data quality ---------------------------------------------------------------

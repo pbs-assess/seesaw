@@ -37,7 +37,7 @@ if (FALSE) {
       data = actual, mapping = aes(year, total),
       inherit.aes = FALSE, lty = 2
     ) +
-    facet_wrap( ~ type,
+    facet_wrap( ~ model,
       scales = "free_y"
     )
 }
@@ -55,8 +55,14 @@ sanitize_scenario_name <- function(x) {
   ifelse(nchar(x) == 0L, "scenario", x)
 }
 
-output_file <- "data-generated/sawtooth-sim-june26.rds"
-cache_dir <- "data-generated/sawtooth-sim-june26-cache"
+# Set to TRUE to fit only the model that produces the seesaw (IID fields +
+# factor(year)), e.g., to diagnose which scenarios drive it:
+seesaw_only <- FALSE
+models_to_fit <- if (seesaw_only) "IID RF, factor(year)" else NULL
+
+run_name <- if (seesaw_only) "sawtooth-sim-oct09-seesaw-only" else "sawtooth-sim-oct09"
+output_file <- file.path("data-generated", paste0(run_name, ".rds"))
+cache_dir <- file.path("data-generated", paste0(run_name, "-cache"))
 dir.create("data-generated", showWarnings = FALSE)
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -87,7 +93,7 @@ if (nrow(todo) > 0L) {
   furrr::future_pwalk(
     todo,
     function(seed, scen_i, scenario_slug, scenario_label, cache_file) {
-      out <- do.call(sim_fit_and_index, c(sc[[scen_i]], .seed = seed))
+      out <- do.call(sim_fit_and_index, c(sc[[scen_i]], list(.seed = seed, models = models_to_fit)))
       out$label <- scenario_label
       saveRDS(out, cache_file)
     },

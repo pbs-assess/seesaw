@@ -26,26 +26,21 @@ surveyjoin::load_sql_data()
 
 survey_names <- c("SYN QCS", "SYN HS")
 ci_level <- 0.5
+# Moving window (in survey occasions) for max A; as in
+# analysis/05-qcs-hs-experimental-biennial.R. With 11 occasions, 8 gives 4
+# windows (10, as in the annual-survey scripts, would give only 2).
+seesaw_window <- 8L
 
+# Strong seesaws under biennial QCS / HS sampling across a range of taxa; see
+# analysis/qcs-hs-biennial-screen.R
 species_to_fit <- c(
-  "pacific cod"
-  # "arrowtooth flounder",
-  # "dover sole",
-  # "english sole",
-  # "flathead sole",
-  # "lingcod",
-  # "longnose skate",
-  # "pacific halibut",
-  # "pacific ocean perch",
-  # "pacific spiny dogfish",
-  # "petrale sole",
-  # "redbanded rockfish",
-  # "rex sole",
-  # "sablefish",
-  # "shortspine thornyhead",
-  # "slender sole",
-  # "spotted ratfish",
-  # "walleye pollock"
+  "pacific cod",
+  "spotted ratfish",
+  "pacific ocean perch",
+  "pacific halibut",
+  "pacific spiny dogfish",
+  "lingcod",
+  "shortspine thornyhead"
 )
 
 # Data -----------------------------------------------------------------------
@@ -143,19 +138,28 @@ fit_species <- function(species) {
     mutate(species = species, .before = 1L)
 }
 
-fits_file <- here::here("data-generated/qcs-hs-biennial-models.rds")
-if (!file.exists(fits_file)) {
+# One cache file per species; delete a file to refit that species
+fits_dir <- here::here("data-generated/qcs-hs-biennial-models")
+dir.create(fits_dir, showWarnings = FALSE)
+fits_file <- \(species) file.path(fits_dir, paste0(gsub(" ", "-", species), ".rds"))
+
+to_fit <- species_to_fit[!file.exists(fits_file(species_to_fit))]
+if (length(to_fit) > 0L) {
+  fit_and_save <- function(species) {
+    out <- fit_species(species)
+    saveRDS(out, fits_file(species))
+    out
+  }
   # Run sequentially for one species so the fitting progress prints
-  if (length(species_to_fit) == 1L) {
-    indexes <- purrr::map_dfr(species_to_fit, fit_species)
+  if (length(to_fit) == 1L) {
+    fit_and_save(to_fit)
   } else {
-    future::plan(future::multisession, workers = min(length(species_to_fit), future::availableCores() / 2))
-    indexes <- furrr::future_map_dfr(species_to_fit, fit_species, .options = furrr::furrr_options(seed = TRUE))
+    future::plan(future::multisession, workers = min(length(to_fit), future::availableCores() / 2))
+    furrr::future_walk(to_fit, fit_and_save, .options = furrr::furrr_options(seed = TRUE, scheduling = Inf))
     future::plan(future::sequential)
   }
-  saveRDS(indexes, fits_file)
 }
-indexes <- readRDS(fits_file)
+indexes <- purrr::map_dfr(fits_file(species_to_fit), readRDS)
 
 # Performance metrics ----------------------------------------------------------
 
@@ -173,14 +177,14 @@ compared <- biennial |>
     log_error = log_est - log(true_est)
   )
 
-# Phase follows which region was sampled, not calendar-year parity
+# Phase follows which region was sampled, not calendar-year parity. A_max is
+# the maximum A across moving windows.
 seesaw_A <- function(d) {
   d <- arrange(d, year)
-  as_tibble(t(period2_metric(
-    d$est,
-    year = d$year,
-    phase = if_else(d$primary_survey == "SYN HS", 0.5, -0.5)
-  )))
+  phase <- if_else(d$primary_survey == "SYN HS", 0.5, -0.5)
+  mw <- moving_window(d$est, year = d$year, window = seesaw_window, phase = phase)
+  as_tibble(t(period2_metric(d$est, year = d$year, phase = phase))) |>
+    mutate(A_max = max(mw$A))
 }
 
 metrics <- compared |>
@@ -205,7 +209,7 @@ A_truth <- indexes |>
   ungroup()
 
 metrics <- metrics |>
-  left_join(select(A_biennial, species, model, A, A_lower, A_upper), by = c("species", "model"))
+  left_join(select(A_biennial, species, model, A, A_lower, A_upper, A_max), by = c("species", "model"))
 
 saveRDS(
   list(indexes = indexes, metrics = metrics, A_biennial = A_biennial, A_truth = A_truth),
@@ -242,14 +246,17 @@ biennial |>
 ggsave(here::here("figs/qcs-hs-biennial-indexes.pdf"), width = 16, height = 3 + 2.5 * length(unique(biennial$species)))
 
 metrics |>
-  tidyr::pivot_longer(c(rmse, bias, coverage, A), names_to = "metric") |>
+  tidyr::pivot_longer(c(rmse, bias, coverage, A, A_max), names_to = "metric") |>
   mutate(
     model = factor(model, levels = rev(model_order)),
-    metric = factor(metric, levels = c("rmse", "bias", "coverage", "A"),
-      labels = c("RMSE (log)", "Bias (log)", "50% CI coverage", "Seesaw A (%)"))
+    metric = factor(metric, levels = c("rmse", "bias", "coverage", "A", "A_max"),
+      labels = c(
+        "RMSE (log)", "Bias (log)", "50% CI coverage", "Seesaw A (%)",
+        paste0("Max A, ", seesaw_window, "-survey windows (%)")
+      ))
   ) |>
   ggplot(aes(value, model, colour = species)) +
   geom_point() +
   facet_wrap(~metric, scales = "free_x", nrow = 1) +
   labs(x = NULL, y = NULL, colour = "Species")
-ggsave(here::here("figs/qcs-hs-biennial-metrics.pdf"), width = 12, height = 4)
+ggsave(here::here("figs/qcs-hs-biennial-metrics.pdf"), width = 14, height = 4)

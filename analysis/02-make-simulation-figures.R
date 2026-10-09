@@ -54,7 +54,6 @@ actual2 <- mutate(actual,
 
 g <- out_df |>
   filter(seed == seed_to_plot) |>
-  mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
   mutate(type_facet = forcats::fct_relabel(model, ~gsub(",\\s*", ",\n", .x))) |>
   mutate(label = factor(wrap_label(as.character(label)),
     levels = label_levels_wrapped
@@ -96,8 +95,7 @@ labels_wrapped <- wrap_label(labels)
 SCALER <- 1e4
 out_df |>
   filter(seed == seed_to_plot) |>
-  filter(label %in% labels, with_depth == "covariate = FALSE", model %in% c("RW RF", "IID RF, factor(year)", "IID RF, RW year", "RW RF, RW year")) |>
-  mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
+  filter(label %in% labels, model %in% c("RW RF", "IID RF, factor(year)", "IID RF, RW year", "RW RF, RW year")) |>
   mutate(label = factor(wrap_label(as.character(label)),
     levels = labels_wrapped
   )) |>

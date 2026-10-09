@@ -1,7 +1,18 @@
 sim_ar1_heavy <- function(
     n, marginal_sd, rho, mu = 0,
-    heavy_sd_mult = 1, heavy_sd_frac = 0, s = 42) {
+    heavy_sd_mult = 1, heavy_sd_frac = 0, s = 42,
+    innovation_sd = NULL) {
   set.seed(s)
+
+  # Random walk: no stationary marginal SD, so start from `mu`.
+  if (rho >= 1) {
+    if (is.null(innovation_sd)) cli::cli_abort("`rho = 1` requires `innovation_sd`.")
+    if (heavy_sd_frac != 0) cli::cli_abort("Heavy-tailed deviations are not implemented for `rho = 1`.")
+    return(cumsum(rnorm(n, 0, innovation_sd)) + mu)
+  }
+
+  # Hold the step (innovation) SD fixed instead of the marginal SD:
+  if (!is.null(innovation_sd)) marginal_sd <- innovation_sd / sqrt(1 - rho^2)
 
   # Exact non-heavy path to match stats::arima.sim() behavior.
   if (heavy_sd_frac == 0) {
@@ -45,6 +56,7 @@ sim <- function(
   north_effect = 0,
   year_arima.sim = list(ar = 0.8),
   year_marginal_sd = 0.2,
+  year_innovation_sd = NULL,
   svc_trend = 0,
   heavy_sd_mult = 1,
   heavy_sd_frac = 0) {
@@ -65,6 +77,7 @@ sim <- function(
     rho = year_arima.sim$ar,
     mu = year_mean,
     marginal_sd = year_marginal_sd,
+    innovation_sd = year_innovation_sd,
     heavy_sd_mult = heavy_sd_mult,
     heavy_sd_frac = heavy_sd_frac,
     s = seed * 927849
@@ -315,12 +328,24 @@ observe <- function(
   d
 }
 
+# Mesh over the unit-square domain with an outer buffer to limit SPDE
+# boundary effects; `max_edge` is the maximum triangle edge inside the domain
+make_square_mesh <- function(dat, max_edge, outer_max_edge = 0.15) {
+  m <- fmesher::fm_mesh_2d_inla(
+    loc.domain = cbind(c(0, 1, 1, 0), c(0, 0, 1, 1)),
+    max.edge = c(max_edge, outer_max_edge),
+    offset = c(0.03, 0.25)
+  )
+  suppressMessages(make_mesh(dat, xy_cols = c("X", "Y"), mesh = m))
+}
+
 sim_fit_and_index <- function(
     n_year,
     .seed,
     gap_size = 0.3,
     obs_sampled_size = 400L,
     year_marginal_sd = 0.5,
+    year_innovation_sd = NULL,
     obs_yrs = list(
       north_yrs = seq(1, n_year - 1, 2),
       south_yrs = seq(2, n_year, 2)
@@ -342,7 +367,10 @@ sim_fit_and_index <- function(
     return_preds = FALSE, 
     return_sim_dat = FALSE,
     return_obs_dat = FALSE,
-    sim_coefs = c(2, 5)) {
+    sim_coefs = c(2, 5),
+    sim_mesh_max_edge = 0.02,
+    fit_mesh_max_edge = 0.05,
+    models = NULL) {
   is_even <- function(x) x %% 2 == 0
   if (!is_even(n_year)) cli::cli_abort("Number of years must be even.")
 
@@ -353,13 +381,14 @@ sim_fit_and_index <- function(
     X = seq(0, 1, length.out = 100), Y = seq(0, 1, length.out = 100),
     year = seq_len(n_year)
   )
-  mesh_sim <- make_mesh(predictor_grid, xy_cols = c("X", "Y"), cutoff = 0.05)
+  mesh_sim <- make_square_mesh(predictor_grid, max_edge = sim_mesh_max_edge)
 
   cli::cli_alert_success("Simulating...")
   x <- sim(predictor_grid, mesh_sim,
     seed = .seed, phi = phi, range = range,
     region_cutoff = region_cutoff,
     year_arima.sim = year_arima.sim, year_marginal_sd = year_marginal_sd,
+    year_innovation_sd = year_innovation_sd,
     coefs = sim_coefs, sigma_E = sigma_E,
     heavy_sd_mult = heavy_sd_mult,
     heavy_sd_frac = heavy_sd_frac,
@@ -459,7 +488,7 @@ sim_fit_and_index <- function(
   # Fit models --------------------------------------------------------------
 
   cli::cli_alert_success("Fitting models...")
-  mesh <- make_mesh(d, c("X", "Y"), cutoff = 0.05)
+  mesh <- make_square_mesh(d, max_edge = fit_mesh_max_edge)
   # priors <- sdmTMBpriors(
   #   matern_s = pc_matern(range_gt = 0.2, sigma_lt = 1.5),
   #   matern_st = pc_matern(range_gt = 0.2, sigma_lt = 0.5)
@@ -471,7 +500,14 @@ sim_fit_and_index <- function(
     if (!inherits(x, "sdmTMB")) {
       return(NA)
     }
-    if (!all(unlist(sanity(x, gradient_thresh = 0.01)))) {
+    # sanity() hard-codes sigma < 0.01 as a failure; swap in 0.001
+    s <- sanity(x, gradient_thresh = 0.01, silent = TRUE)
+    s$sigmas_ok <- NULL
+    s$all_ok <- NULL
+    rp <- tidy(x, "ran_pars", silent = TRUE)
+    sigmas <- rp$estimate[grepl("sigma", rp$term)]
+    sigmas_ok <- all(sigmas > 0.001 & sigmas < 100)
+    if (!all(unlist(s)) || !isTRUE(sigmas_ok)) {
       return(NA)
     } else {
       return(x)
@@ -482,6 +518,17 @@ sim_fit_and_index <- function(
 
   source(here::here("analysis", "estimation-scenarios.R"))
   model_specs <- build_model_specs()
+  if (!is.null(models)) {
+    spec_names <- purrr::map_chr(model_specs, "name")
+    unknown_models <- setdiff(models, spec_names)
+    if (length(unknown_models) > 0L) {
+      cli::cli_abort(c(
+        "Unknown model name(s) in `models`.",
+        "x" = "Unknown: {paste(unknown_models, collapse = ', ')}"
+      ))
+    }
+    model_specs <- model_specs[spec_names %in% models]
+  }
 
   data_lookup <- list(base = d, pairs = d_pairs)
   formula_has_factor_region <- function(formula_obj) {
@@ -603,9 +650,7 @@ sim_fit_and_index <- function(
     if (i %% 4L == 0L) gc(FALSE)
   }
 
-  indexes_df <- dplyr::bind_rows(indexes, .id = "model") |>
-    mutate(with_depth = paste0("covariate = ", grepl("covariate", model))) |>
-    mutate(type = gsub(" covariate", "", model))
+  indexes_df <- dplyr::bind_rows(indexes, .id = "model")
 
   indexes_df <- left_join(indexes_df, actual, by = "year") |>
     mutate(seed = .seed)

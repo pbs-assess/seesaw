@@ -32,7 +32,7 @@ if (!file.exists(f)) { # save a little time
   load(f)
 }
 
-filter(index, type == "IID", with_depth == "covariate = FALSE") |>
+filter(index, model == "IID RF, factor(year)") |>
   ggplot(aes(year, est, ymin = lwr, ymax = upr)) +
   ggsidekick::theme_sleek() +
   geom_pointrange(aes(colour = sampled_region)) +
