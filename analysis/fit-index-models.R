@@ -17,7 +17,8 @@ get_index_ok <- function(fit, grid, nsplit = 1L) {
   tryCatch(
     sdmTMB::get_index_split(
       fit,
-      newdata = grid, area = grid$area, offset = rep(0, nrow(grid)), nsplit = nsplit, silent = TRUE
+      newdata = grid, area = grid$area, offset = rep(0, nrow(grid)), nsplit = nsplit,
+      bias_correct = TRUE, silent = TRUE
     ),
     error = \(e) NULL
   )
