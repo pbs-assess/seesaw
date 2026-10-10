@@ -12,9 +12,13 @@ fit_ok <- function(expr) {
   if (ok) fit else NULL
 }
 
-get_index_ok <- function(fit, grid) {
+# nsplit > 1 predicts in chunks of years to reduce peak memory on large grids
+get_index_ok <- function(fit, grid, nsplit = 1L) {
   tryCatch(
-    sdmTMB::get_index(fit, newdata = grid, area = grid$area, offset = rep(0, nrow(grid))),
+    sdmTMB::get_index_split(
+      fit,
+      newdata = grid, area = grid$area, offset = rep(0, nrow(grid)), nsplit = nsplit, silent = TRUE
+    ),
     error = \(e) NULL
   )
 }
@@ -39,8 +43,10 @@ clamp_depth <- function(grid, dat, depth_col = "depth_m") {
 #' @param all_data Optional list(data, mesh, offset) for the "all data" models,
 #'   which also need a `survey_name` column.
 #' @param control [sdmTMB::sdmTMBcontrol()] list used for all models.
+#' @param nsplit Number of year chunks to split index prediction into
+#'   ([sdmTMB::get_index_split()]); increase for large grids.
 fit_index_models <- function(dat, grid, mesh, response, family, offset, covariates = NULL, all_data = NULL,
-                             control = sdmTMB::sdmTMBcontrol()) {
+                             control = sdmTMB::sdmTMBcontrol(), nsplit = 1L) {
   all_yrs <- seq(min(dat$year), max(dat$year))
   base_formula <- stats::as.formula(paste(response, "~", paste(c("0 + factor(year)", covariates), collapse = " + ")))
   # RHS for models where the year effect is not a fixed factor
@@ -160,7 +166,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, covariat
   ))
 
   purrr::compact(fits) |>
-    purrr::map(\(f) get_index_ok(f, grid)) |>
+    purrr::map(\(f) get_index_ok(f, grid, nsplit = nsplit)) |>
     dplyr::bind_rows(.id = "model") |>
     dplyr::mutate(family = paste(template$family$family, collapse = "/"))
 }

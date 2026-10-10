@@ -39,11 +39,13 @@ period2_metric <- function(x, year = seq_along(x), conf = 0.95, phase = NULL) {
   )
 }
 
+# Windows span a fixed number of calendar years, so a window with a missing
+# year contains fewer observations
 moving_window <- function(x, year, window = 10L, phase = NULL, ...) {
-  n <- length(x)
+  starts <- seq(min(year), max(year) - window + 1L)
 
-  out <- lapply(seq_len(n - window + 1L), function(i) {
-    ind <- i:(i + window - 1L)
+  out <- lapply(starts, function(y0) {
+    ind <- which(year >= y0 & year < y0 + window)
 
     res <- period2_metric(
       x = x[ind],
@@ -53,8 +55,9 @@ moving_window <- function(x, year, window = 10L, phase = NULL, ...) {
     )
 
     data.frame(
-      start = year[ind[1L]],
-      end = year[ind[length(ind)]],
+      start = y0,
+      end = y0 + window - 1L,
+      n = length(ind),
       t(res)
     )
   })

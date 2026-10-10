@@ -62,10 +62,10 @@ plot_A_moving_window <- function(seesaw_mw, window, include_all_data = FALSE, co
 
   if (connect_stocks) {
     y_breaks <- c(0, 2, 10, 25, 50, 100, 200, 400, 600, 800)
-    y_lab <- paste0("Maximum biennial amplitude (%)\nacross ", window, "-survey windows")
+    y_lab <- paste0("Maximum biennial amplitude (%)\nacross ", window, "-year windows")
   } else {
     y_breaks <- c(0, 2, 10, seq(25, 200, 25))
-    y_lab <- paste0("Estimated biennial amplitude (%)\nacross ", window, "-survey windows")
+    y_lab <- paste0("Estimated biennial amplitude (%)\nacross ", window, "-year windows")
   }
 
   g <- dat_mw |>

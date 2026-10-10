@@ -51,7 +51,8 @@ do_fit_afsc_pbs <- function(.sp) {
     response = "catch_weight",
     family = sdmTMB::delta_gamma(type = "poisson-link"),
     offset = log(dat$effort),
-    covariates = "factor(survey_group)"
+    covariates = "factor(survey_group)",
+    nsplit = 5L # large GOA + PBS grid; predict in chunks to limit memory
   ) |>
     dplyr::mutate(species = .sp)
 }
