@@ -1,5 +1,6 @@
-# Simulation grid: is the seesaw governed by the regional contrast in the
-# spatial field relative to its SD (Delta / sigma_O)?
+# Simulation grid: how does the seesaw depend on the regional contrast in the
+# spatial field (Delta) and the spatial SD (sigma_O)? An earlier hypothesis
+# that the ratio Delta / sigma_O governs it was not supported.
 
 library(dplyr)
 library(ggplot2)
@@ -11,7 +12,7 @@ source(here::here("analysis/fit-index-models.R"))
 
 theme_set(ggsidekick::theme_sleek())
 
-deltas <- c(0.5, 1, 2)
+deltas <- c(0, 0.5, 1, 2) # 0 = no regional contrast (control)
 sigma_Os <- c(1, 2, 4)
 seeds <- seq_len(50L)
 
@@ -139,7 +140,7 @@ tasks <- tidyr::expand_grid(delta = deltas, sigma_O = sigma_Os, seed = seeds) |>
 todo <- filter(tasks, !file.exists(cache_file))
 
 if (nrow(todo) > 0L) {
-  future::plan(future::multicore, workers = max(1L, min(25L, future::availableCores() - 2L)))
+  future::plan(future::multisession, workers = max(1L, min(18L, future::availableCores() - 2L)))
   furrr::future_pwalk(
     todo,
     \(delta, sigma_O, seed, cache_file) saveRDS(run_task(delta, sigma_O, seed), cache_file),
@@ -153,20 +154,28 @@ saveRDS(out, here::here("data-generated/contrast-grid.rds"))
 
 # Metrics ----------------------------------------------------------------------
 
-# Alternation follows year parity (north odd, south even), the default phase
-A_of <- \(x, year) period2_metric(x, year = year)[["A"]]
+# Alternation follows year parity (north odd, south even), the default phase,
+# so beta (even minus odd years, log scale) is negative when north years read
+# high. Flip the sign so a positive bias is a seesaw towards the richer north,
+# then express it on the same percentage scale as A: 100 * (exp(bias) - 1).
+beta_of <- \(x, year) period2_metric(x, year = year)[["beta"]]
 
 metrics <- out |>
   arrange(delta, sigma_O, seed, model, year) |>
   group_by(delta, sigma_O, seed, model) |>
   summarise(
-    A = A_of(est, year),
-    A_true = A_of(true, year),
+    beta = beta_of(est, year),
+    beta_true = beta_of(true, year),
     rmse = sqrt(mean((log_est - log(true))^2)),
+    delta_hat = first(delta_hat),
     ratio_hat = abs(first(delta_hat)) / first(sigma_O_hat),
     .groups = "drop"
   ) |>
-  mutate(ratio = delta / sigma_O, excess_A = A - A_true)
+  mutate(
+    ratio = delta / sigma_O,
+    bias = -(beta - beta_true),
+    excess_A = 100 * (exp(bias) - 1)
+  )
 
 cell_summary <- metrics |>
   group_by(model, delta, sigma_O, ratio) |>
@@ -176,6 +185,7 @@ cell_summary <- metrics |>
     excess_lo = quantile(excess_A, 0.25),
     excess_hi = quantile(excess_A, 0.75),
     rmse = mean(rmse),
+    delta_hat = median(delta_hat),
     ratio_hat = median(ratio_hat),
     .groups = "drop"
   )
@@ -183,26 +193,32 @@ print(cell_summary, n = Inf)
 
 # Plots ------------------------------------------------------------------------
 
-# Excess seesaw against Delta / sigma_O; collapse of the sigma_O lines onto
-# one curve means the ratio, not Delta or sigma_O alone, drives the seesaw
-ggplot(cell_summary, aes(ratio, excess_med, colour = factor(sigma_O))) +
+# Excess seesaw against the regional contrast. Lines for each sigma_O sit close
+# together, so Delta (not Delta / sigma_O) drives the bias; larger sigma_O lets
+# the spatial field absorb a little more of the contrast.
+dodge <- position_dodge(width = 0.15)
+ggplot(cell_summary, aes(delta, excess_med, colour = factor(sigma_O))) +
   geom_hline(yintercept = 0, linetype = 2, colour = "grey60") +
-  geom_linerange(aes(ymin = excess_lo, ymax = excess_hi)) +
-  geom_line() +
-  geom_point() +
-  scale_x_continuous(trans = "log2") +
+  geom_linerange(aes(ymin = excess_lo, ymax = excess_hi), position = dodge) +
+  geom_line(position = dodge) +
+  geom_point(position = dodge) +
+  scale_x_continuous(
+    breaks = deltas,
+    labels = \(x) sprintf("%g\n(%.1fx)", x, exp(x)),
+    expand = expansion(mult = 0.08)
+  ) +
   scale_colour_viridis_d(end = 0.85) +
   facet_wrap(~model) +
   labs(
-    x = expression(Delta / sigma[O]),
-    y = "Excess seesaw A over truth (%)",
-    colour = expression(sigma[O]),
-    caption = "Median and IQR across seeds"
+    x = expression("North-south difference in log density" ~ (Delta)),
+    y = "Excess seesaw A (%)",
+    colour = expression(Spatial ~ SD ~ (sigma[O]))
   )
-ggsave(here::here("figs/contrast-grid-excess-A.pdf"), width = 7, height = 3.5)
+ggsave(here::here("figs/contrast-grid-bias-delta.pdf"), width = 7, height = 3.5)
 
 # Diagnostic: estimated ratio from each biennial fit against the true ratio
-ggplot(metrics, aes(ratio, ratio_hat, colour = factor(sigma_O))) +
+# (Delta = 0 has no ratio to show on a log axis)
+ggplot(filter(metrics, delta > 0), aes(ratio, ratio_hat, colour = factor(sigma_O))) +
   geom_abline(linetype = 2, colour = "grey60") +
   geom_point(position = position_jitter(width = 0.03), alpha = 0.3) +
   scale_x_continuous(trans = "log2") +
