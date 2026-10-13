@@ -56,6 +56,12 @@ seesaw_window <- 10L
 grid_res_km <- 6
 # Predict the index in chunks of years to limit peak memory per worker
 index_nsplit <- 4L
+# Mesh cutoff (km); 20 gives ~400 nodes for the WCGBTS (15 gave ~600)
+mesh_cutoff <- 20
+# Parallel workers (multisession). Peak memory was ~3.5 GB per worker with
+# mesh_cutoff = 15, so lower this if the machine has less than ~3.5 GB x
+# workers of RAM.
+n_workers <- max(1L, min(60L, future::availableCores() - 2L))
 
 # Operating model, also refit to the full simulated data for calibration
 om_model <- "AR1 RF, factor(year)"
@@ -104,8 +110,11 @@ base_grid <- grid_fine |>
 # Model time as survey occasion (no survey in 2020) and alternate the sampled
 # half by occasion
 prepare_species_data <- function(species) {
+  # Local copy: future's globals detection misses `.env$survey_name`, so a
+  # multisession worker wouldn't receive it
+  keep_survey <- survey_name
   surveyjoin::get_data(species, regions = "nwfsc") |>
-    filter(survey_name == .env$survey_name, effort > 0) |>
+    filter(survey_name == keep_survey, effort > 0) |>
     mutate(year = lubridate::year(lubridate::ymd(date))) |>
     select(year, lon_start, lat_start, depth_m, effort, catch_weight) |>
     tidyr::drop_na() |>
@@ -164,7 +173,7 @@ setup_species <- function(species) {
   dat <- prepare_species_data(species)
   is_sampled <- dat$region == dat$primary_region
   grid <- sdmTMB::replicate_df(base_grid, "year", sort(unique(dat$year)))
-  mesh <- make_mesh(dat, c("X", "Y"), cutoff = 15)
+  mesh <- make_mesh(dat, c("X", "Y"), cutoff = mesh_cutoff)
   mesh_alt <- make_mesh(dat[is_sampled, ], c("X", "Y"), mesh = mesh$mesh)
 
   fit_om <- fit_ok(fit_model(om_model, dat, mesh))
@@ -223,34 +232,26 @@ setup_species <- function(species) {
 
 # Fit replicates --------------------------------------------------------------
 
-fit_rep <- function(setup, rep) {
+# One model fit to one replicate: the operating model to the full simulated
+# data or an alternating model to the sampled half. Returns an empty tibble if
+# the fit fails sanity checks.
+fit_task <- function(setup, catch, rep, model, design) {
   RhpcBLASctl::blas_set_num_threads(1L)
   RhpcBLASctl::omp_set_num_threads(1L)
 
   d <- setup$dat
-  d$catch_weight <- setup$catches[[rep]]
-
-  index_ok <- function(model, d, mesh) {
-    fit <- fit_ok(fit_model(model, d, mesh))
-    if (is.null(fit)) tibble::tibble() else get_index_ok(fit, setup$grid, nsplit = index_nsplit)
+  d$catch_weight <- catch
+  mesh <- setup$mesh
+  if (design == "alternating") {
+    d <- d[setup$is_sampled, ]
+    mesh <- setup$mesh_alt
   }
 
-  bind_rows(
-    full = index_ok(om_model, d, setup$mesh) |> mutate(model = om_model),
-    alternating = purrr::map(
-      alternating_models,
-      \(m) index_ok(m, d[setup$is_sampled, ], setup$mesh_alt)
-    ) |>
-      setNames(alternating_models) |>
-      bind_rows(.id = "model"),
-    .id = "design"
-  ) |>
-    mutate(
-      model = if_else(design == "full", paste0(model, " (full data)"), model),
-      species = setup$species,
-      rep = rep,
-      .before = 1L
-    )
+  fit <- fit_ok(fit_model(model, d, mesh))
+  if (is.null(fit)) return(tibble::tibble())
+  model_label <- if (design == "full") paste0(model, " (full data)") else model
+  get_index_ok(fit, setup$grid, nsplit = index_nsplit) |>
+    mutate(species = setup$species, rep = rep, design = design, model = model_label, .before = 1L)
 }
 
 if (FALSE) {
@@ -258,42 +259,134 @@ if (FALSE) {
   s <- setup_species("lingcod")
   tictoc::toc()
   tictoc::tic()
-  x <- fit_rep(s, 1L)
+  x <- fit_task(s, s$catches[[1L]], 1L, "RW RF", "alternating")
   tictoc::toc()
 }
 
-# One cache file per species; delete a file to refit that species
+# One cache file per species; delete a file to refit that species. Each
+# species' setup (operating model + simulation) and each species x replicate x
+# model fit are also cached as they finish, in setups/ and fits/, so a run can
+# be monitored and restarted where it left off; delete those too to refit from
+# scratch.
+# Monitor with: tail -f data-generated/nwfsc-split-self-test/progress.log
 fits_dir <- here::here("data-generated/nwfsc-split-self-test")
-dir.create(fits_dir, showWarnings = FALSE)
-fits_file <- \(species) file.path(fits_dir, paste0(gsub(" ", "-", species), ".rds"))
+setups_dir <- file.path(fits_dir, "setups")
+tasks_dir <- file.path(fits_dir, "fits")
+dir.create(setups_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(tasks_dir, recursive = TRUE, showWarnings = FALSE)
+slug <- \(x) gsub("^-|-$", "", gsub("[^a-z0-9]+", "-", tolower(x)))
+fits_file <- \(species) file.path(fits_dir, paste0(slug(species), ".rds"))
+setup_file <- \(species) file.path(setups_dir, paste0(slug(species), ".rds"))
+task_file <- \(species, rep, design, model) {
+  file.path(tasks_dir, sprintf("%s-rep%02d-%s-%s.rds", slug(species), rep, design, slug(model)))
+}
+progress_log <- file.path(fits_dir, "progress.log")
+
+log_progress <- function(...) {
+  cat(format(Sys.time(), "%Y-%m-%d %H:%M:%S "), ..., "\n", sep = "", file = progress_log, append = TRUE)
+}
+minutes_since <- \(t0) round(as.numeric(difftime(Sys.time(), t0, units = "mins")), 1)
+
+# Errors are logged and not cached, so a rerun retries that task. A NULL setup
+# (operating model failed sanity checks) or empty fit (failed sanity checks) is
+# cached so it isn't refit.
+run_setup <- function(species) {
+  t0 <- Sys.time()
+  log_progress("start setup: ", species)
+  tryCatch(
+    {
+      setup <- setup_species(species)
+      saveRDS(setup, setup_file(species))
+      log_progress(
+        "done setup: ", species, if (is.null(setup)) " (OM FAILED)", " [", minutes_since(t0), " min]"
+      )
+    },
+    error = \(e) log_progress("ERROR setup: ", species, ": ", conditionMessage(e))
+  )
+  invisible(NULL)
+}
+
+run_task <- function(setup, catch, rep, model, design, file) {
+  t0 <- Sys.time()
+  label <- paste0(setup$species, " rep ", rep, " ", model, " (", design, ")")
+  tryCatch(
+    {
+      out <- fit_task(setup, catch, rep, model, design)
+      saveRDS(out, file)
+      log_progress(
+        "done: ", label, if (nrow(out) == 0L) " FAILED SANITY", " [", minutes_since(t0), " min; ",
+        length(list.files(tasks_dir)), "/", n_task_files, " fits cached]"
+      )
+    },
+    error = \(e) log_progress("ERROR: ", label, ": ", conditionMessage(e))
+  )
+  invisible(NULL)
+}
+
+read_if_exists <- \(f) if (file.exists(f)) readRDS(f)
 
 to_fit <- species_to_fit[!file.exists(fits_file(species_to_fit))]
 if (length(to_fit) > 0L) {
-  future::plan(future::multicore, workers = max(1L, min(25L, future::availableCores() - 2L)))
-  setups <- furrr::future_map(
-    to_fit, setup_species,
-    .options = furrr::furrr_options(seed = TRUE, scheduling = Inf)
-  ) |>
-    purrr::compact()
+  future::plan(future::multisession, workers = n_workers)
+  log_progress("=== run started: ", length(to_fit), " species, ", n_reps, " reps each, ", n_workers, " workers ===")
 
-  # One species x replicate per future so a slow fit doesn't hold up a chunk
-  tasks <- tidyr::expand_grid(i = seq_along(setups), rep = seq_len(n_reps))
-  rep_indexes <- furrr::future_map2(
-    tasks$i, tasks$rep, \(i, rep) fit_rep(setups[[i]], rep),
+  setup_todo <- to_fit[!file.exists(setup_file(to_fit))]
+  furrr::future_walk(
+    setup_todo, run_setup,
+    .options = furrr::furrr_options(seed = TRUE, scheduling = Inf)
+  )
+  setups <- purrr::compact(lapply(setup_file(to_fit), read_if_exists))
+
+  # One species x replicate x model per future so the workers stay busy and a
+  # slow fit doesn't hold up others. Replicates are the outer loop so complete
+  # replicates accumulate across species as the run goes.
+  designs <- tibble::tibble(
+    design = c("full", rep("alternating", length(alternating_models))),
+    model = c(om_model, alternating_models)
+  )
+  tasks <- tidyr::expand_grid(rep = seq_len(n_reps), i = seq_along(setups), designs) |>
+    mutate(
+      species = purrr::map_chr(i, \(i) setups[[i]]$species),
+      file = task_file(species, rep, design, model)
+    )
+  todo <- tasks[!file.exists(tasks$file), ]
+  n_task_files <- nrow(tasks)
+  log_progress(nrow(todo), " of ", nrow(tasks), " fits to run")
+
+  # Each future gets only what its fit needs: its species' data, grid, and
+  # meshes plus its replicate's catches (not all setups or replicates)
+  setups_lite <- lapply(setups, \(s) s[c("species", "dat", "is_sampled", "grid", "mesh", "mesh_alt")])
+  furrr::future_pwalk(
+    list(
+      setup = lapply(todo$i, \(i) setups_lite[[i]]),
+      catch = purrr::map2(todo$i, todo$rep, \(i, rep) setups[[i]]$catches[[rep]]),
+      rep = todo$rep,
+      model = todo$model,
+      design = todo$design,
+      file = todo$file
+    ),
+    run_task,
     .options = furrr::furrr_options(seed = TRUE, scheduling = Inf)
   )
   future::plan(future::sequential)
 
+  # Combine a species only once all its fits have finished
   for (i in seq_along(setups)) {
+    files <- tasks$file[tasks$i == i]
+    if (!all(file.exists(files))) {
+      cli::cli_warn("{setups[[i]]$species}: {sum(!file.exists(files))} fit(s) missing; see {progress_log}")
+      next
+    }
     saveRDS(
       list(
-        indexes = bind_rows(rep_indexes[tasks$i == i]),
+        indexes = bind_rows(lapply(files, readRDS)),
         true_indexes = mutate(setups[[i]]$true_indexes, species = setups[[i]]$species, .before = 1L),
         occasions = mutate(setups[[i]]$occasions, species = setups[[i]]$species, .before = 1L)
       ),
       fits_file(setups[[i]]$species)
     )
   }
+  log_progress("=== run finished ===")
 }
 
 self_test <- lapply(fits_file(species_to_fit), \(f) if (file.exists(f)) readRDS(f))
