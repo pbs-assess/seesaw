@@ -55,7 +55,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, covariat
   depth_formula <- stats::as.formula(paste(
     ". ~", paste(c("0 + factor(year)", covariates, "poly(log(depth_m), 2)"), collapse = " + ")
   ))
-  rw_prior <- sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::gamma_cv(0.3, 0.5))
+  rw_prior <- sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::lognormal_prior(log(0.3), 0.5))
 
   # The base fit is the update() template for the other models, so keep it
   # even if it fails sanity checks; it is only reported if it passes.

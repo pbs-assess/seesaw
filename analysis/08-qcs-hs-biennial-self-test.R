@@ -65,7 +65,7 @@ family <- delta_gamma(type = "poisson-link")
 # Drop random fields with SDs collapsing to zero (e.g., the encounter
 # spatiotemporal field with biennial data)
 control <- sdmTMBcontrol(collapse_spatial_variance = TRUE)
-rw_prior <- sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5))
+rw_prior <- sdmTMBpriors(sigma_V = lognormal_prior(log(0.3), 0.5))
 
 # Data -----------------------------------------------------------------------
 
@@ -406,6 +406,74 @@ ggsave(
   here::here("figs/qcs-hs-biennial-self-test.pdf"),
   width = 16, height = 1 + 2.2 * length(unique(metrics_rep$species))
 )
+
+# Summary across species: one point per species, each a summary across
+# replicates, scaled so species are comparable; violins show all replicates
+# pooled across species. RMSE is relative to the species' mean full-data
+# operating model RMSE (how much is lost by sampling one region per occasion).
+# Max A is the excess over the true index in the same replicate (spurious
+# seesaw from the model, not from the simulated population).
+summary_levels <- c("rmse_ratio", "coverage_50", "A_max_excess")
+summary_labels <- c("RMSE / full-data RMSE", "50% CI coverage", "Max A - true max A (%)")
+full_model <- paste0(om_model, " (full data)")
+
+rep_summary <- metrics_rep |>
+  left_join(select(A_truth, species, rep, A_max_true = A_max), by = c("species", "rep")) |>
+  group_by(species) |>
+  mutate(
+    rmse_ratio = rmse / mean(rmse[model == full_model]),
+    A_max_excess = A_max - A_max_true
+  ) |>
+  ungroup() |>
+  tidyr::pivot_longer(all_of(summary_levels), names_to = "metric") |>
+  mutate(
+    model = factor(model, levels = rev(model_order)),
+    metric = factor(metric, levels = summary_levels, labels = summary_labels)
+  )
+
+species_summary <- rep_summary |>
+  group_by(species, model, metric) |>
+  summarise(
+    value = if (grepl("A", first(metric))) median(value) else mean(value),
+    .groups = "drop"
+  )
+
+summary_nominal <- tibble::tibble(
+  metric = factor(summary_labels, levels = summary_labels),
+  value = c(1, 0.5, 0)
+)
+
+# Zoom each panel to the widest 10-90% quantile range of the replicates across
+# models, extended to keep the species points and nominal values in view.
+# oob_keep so the violins are still computed from all replicates (as with
+# coord_cartesian(), which can't be set per panel).
+summary_limits <- bind_rows(
+  rep_summary |>
+    group_by(metric, model) |>
+    summarise(lo = quantile(value, 0.1), hi = quantile(value, 0.9), .groups = "drop"),
+  rename(species_summary, lo = value) |> mutate(hi = lo),
+  rename(summary_nominal, lo = value) |> mutate(hi = lo)
+) |>
+  group_by(metric) |>
+  summarise(lo = min(lo), hi = max(hi)) |>
+  arrange(metric)
+summary_x_scales <- purrr::map2(
+  summary_limits$lo, summary_limits$hi,
+  \(lo, hi) scale_x_continuous(limits = c(lo, hi), oob = scales::oob_keep)
+)
+
+ggplot(species_summary, aes(value, model)) +
+  geom_violin(data = rep_summary, fill = "grey90", colour = NA, scale = "width") +
+  geom_vline(aes(xintercept = value), data = summary_nominal, linetype = 2, colour = "grey50") +
+  stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
+  geom_point(aes(colour = species), position = position_jitter(height = 0.15, seed = 1)) +
+  facet_wrap(~metric, nrow = 1, scales = "free_x") +
+  ggh4x::facetted_pos_scales(x = summary_x_scales) +
+  scale_colour_brewer(palette = "Dark2", labels = tools::toTitleCase) +
+  labs(x = NULL, y = NULL, colour = NULL) +
+  theme(legend.position = "bottom", plot.margin = margin(5.5, 12, 5.5, 5.5)) +
+  guides(colour = guide_legend(nrow = 2))
+ggsave(here::here("figs/qcs-hs-biennial-self-test-summary.pdf"), width = 9, height = 4)
 
 compared |>
   filter(rep <= 3) |>
