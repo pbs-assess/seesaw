@@ -28,7 +28,8 @@ surveyjoin::cache_data()
 surveyjoin::load_sql_data()
 
 survey_names <- c("SYN QCS", "SYN HS")
-# Strong seesaws under biennial QCS / HS sampling across a range of taxa; see
+# Strong to moderate seesaws under biennial QCS / HS sampling across a range of
+# taxa, plus arrowtooth flounder as a control with almost none; see
 # analysis/qcs-hs-biennial-screen.R
 species_to_fit <- c(
   "pacific cod",
@@ -37,7 +38,11 @@ species_to_fit <- c(
   "pacific halibut",
   "pacific spiny dogfish",
   "lingcod",
-  "shortspine thornyhead"
+  "sablefish",
+  "dover sole",
+  "arrowtooth flounder"
+  # shortspine thornyhead dropped: its OM encounter AR1 field sits at rho = 1,
+  # so each replicate's new epsilon is a near-static field
 )
 n_reps <- 20L
 ci_levels <- c(0.5, 0.95)
@@ -469,7 +474,8 @@ ggplot(species_summary, aes(value, model)) +
   geom_point(aes(colour = species), position = position_jitter(height = 0.15, seed = 1)) +
   facet_wrap(~metric, nrow = 1, scales = "free_x") +
   ggh4x::facetted_pos_scales(x = summary_x_scales) +
-  scale_colour_brewer(palette = "Dark2", labels = tools::toTitleCase) +
+  # Paired has 12 colours (Dark2 has only 8)
+  scale_colour_brewer(palette = "Paired", labels = tools::toTitleCase) +
   labs(x = NULL, y = NULL, colour = NULL) +
   theme(legend.position = "bottom", plot.margin = margin(5.5, 12, 5.5, 5.5)) +
   guides(colour = guide_legend(nrow = 2))

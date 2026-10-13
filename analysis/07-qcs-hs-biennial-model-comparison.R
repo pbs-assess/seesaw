@@ -31,7 +31,8 @@ ci_level <- 0.5
 # windows (10, as in the annual-survey scripts, would give only 2).
 seesaw_window <- 8L
 
-# Strong seesaws under biennial QCS / HS sampling across a range of taxa; see
+# Strong to moderate seesaws under biennial QCS / HS sampling across a range of
+# taxa, plus arrowtooth flounder as a control with almost none; see
 # analysis/qcs-hs-biennial-screen.R
 species_to_fit <- c(
   "pacific cod",
@@ -40,7 +41,11 @@ species_to_fit <- c(
   "pacific halibut",
   "pacific spiny dogfish",
   "lingcod",
-  "shortspine thornyhead"
+  "sablefish",
+  "dover sole",
+  "arrowtooth flounder"
+  # shortspine thornyhead dropped: its OM encounter AR1 field sits at rho = 1
+  # in analysis/08-qcs-hs-biennial-self-test.R
 )
 
 # Data -----------------------------------------------------------------------
