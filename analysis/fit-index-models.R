@@ -13,7 +13,7 @@ fit_ok <- function(expr) {
 }
 
 # nsplit > 1 predicts in chunks of years to reduce peak memory on large grids
-get_index_ok <- function(fit, grid, nsplit = 1L) {
+get_index_ok <- function(fit, grid, nsplit = 2L) {
   tryCatch(
     sdmTMB::get_index_split(
       fit,
@@ -47,7 +47,7 @@ clamp_depth <- function(grid, dat, depth_col = "depth_m") {
 #' @param nsplit Number of year chunks to split index prediction into
 #'   ([sdmTMB::get_index_split()]); increase for large grids.
 fit_index_models <- function(dat, grid, mesh, response, family, offset, covariates = NULL, all_data = NULL,
-                             control = sdmTMB::sdmTMBcontrol(), nsplit = 1L) {
+                             control = sdmTMB::sdmTMBcontrol(), nsplit = 2L) {
   all_yrs <- seq(min(dat$year), max(dat$year))
   base_formula <- stats::as.formula(paste(response, "~", paste(c("0 + factor(year)", covariates), collapse = " + ")))
   # RHS for models where the year effect is not a fixed factor
