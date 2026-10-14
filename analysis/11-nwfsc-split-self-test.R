@@ -18,16 +18,16 @@
 # 3. Keep one half of the simulated tows per occasion and fit the alternating
 #    models. Also refit the operating model to the full simulated data as a
 #    calibration check.
-# 4. Score RMSE, bias, CI coverage, and seesaw A against the known truth.
+# 4. Score RMSE, bias, CI coverage, seesaw A, and the signed seesaw error
+#    against the known truth.
+#
+# The pipeline and metrics are in analysis/self-test-funcs.R. Everything is
+# cached per replicate, so n_reps can be raised later and only the new
+# replicates are run. Monitor with:
+#   tail -f data-generated/nwfsc-split-self-test/progress.log
 
-library(dplyr)
-library(ggplot2)
-library(sdmTMB)
-
+source(here::here("analysis/self-test-funcs.R"))
 theme_set(ggsidekick::theme_sleek())
-
-source(here::here("analysis/fit-index-models.R"))
-source(here::here("analysis/metric-functions.R"))
 
 surveyjoin::cache_data()
 surveyjoin::load_sql_data()
@@ -48,7 +48,6 @@ species_to_fit <- c(
   "petrale sole"
 )
 n_reps <- 20L
-ci_levels <- c(0.5, 0.95)
 # Moving window (in survey occasions) for max A, as in the annual-survey
 # scripts; 21 occasions gives 12 windows
 seesaw_window <- 10L
@@ -58,9 +57,8 @@ grid_res_km <- 6
 index_nsplit <- 4L
 # Mesh cutoff (km); 20 gives ~400 nodes for the WCGBTS (15 gave ~600)
 mesh_cutoff <- 20
-# Parallel workers (multisession). Peak memory was ~3.5 GB per worker with
-# mesh_cutoff = 15, so lower this if the machine has less than ~3.5 GB x
-# workers of RAM.
+# Peak memory was ~3.5 GB per worker with mesh_cutoff = 15, so lower this if
+# the machine has less than ~3.5 GB x workers of RAM
 n_workers <- max(1L, min(60L, future::availableCores() - 2L))
 
 # Operating model, also refit to the full simulated data for calibration. IID
@@ -82,12 +80,6 @@ alternating_models <- c(
   "AR1 RF, RW year"
 )
 
-family <- delta_gamma(type = "poisson-link")
-# Drop random fields with SDs collapsing to zero (e.g., the encounter
-# spatiotemporal field with alternating data)
-control <- sdmTMBcontrol(collapse_spatial_variance = TRUE)
-rw_prior <- sdmTMBpriors(sigma_V = lognormal_prior(log(0.3), 0.5))
-
 # Grid and split ------------------------------------------------------------
 
 grid_fine <- surveyjoin::nwfsc_grid |>
@@ -104,21 +96,20 @@ cli::cli_inform("Splitting north / south at {round(split_lat, 2)} degrees N")
 # straddles the split
 base_grid <- grid_fine |>
   mutate(region = if_else(lat >= split_lat, "North", "South")) |>
-  sdmTMB::add_utm_columns(c("lon", "lat"), utm_crs = utm_crs) |>
+  add_utm_columns(c("lon", "lat"), utm_crs = utm_crs) |>
   mutate(X = round(X / grid_res_km) * grid_res_km, Y = round(Y / grid_res_km) * grid_res_km) |>
   group_by(region, X, Y) |>
-  summarise(area = sum(area), .groups = "drop")
+  summarise(area = sum(area), .groups = "drop") |>
+  # the region sampled in phase +0.5 occasions, for the true N - S contrast
+  mutate(phase_region = as.integer(region == "North"))
 
 # Data -----------------------------------------------------------------------
 
 # Model time as survey occasion (no survey in 2020) and alternate the sampled
 # half by occasion
 prepare_species_data <- function(species) {
-  # Local copy: future's globals detection misses `.env$survey_name`, so a
-  # multisession worker wouldn't receive it
-  keep_survey <- survey_name
   surveyjoin::get_data(species, regions = "nwfsc") |>
-    filter(survey_name == keep_survey, effort > 0) |>
+    filter(.data$survey_name == .env$survey_name, effort > 0) |>
     mutate(year = lubridate::year(lubridate::ymd(date))) |>
     select(year, lon_start, lat_start, depth_m, effort, catch_weight) |>
     tidyr::drop_na() |>
@@ -126,519 +117,69 @@ prepare_species_data <- function(species) {
       region = if_else(lat_start >= split_lat, "North", "South"),
       occasion = match(year, sort(unique(year))),
       primary_region = if_else(occasion %% 2L == 1L, "North", "South"),
+      # seesaw phase follows which half was sampled
+      phase = if_else(primary_region == "North", 0.5, -0.5),
       cal_year = year,
       year = occasion
     ) |>
-    sdmTMB::add_utm_columns(ll_names = c("lon_start", "lat_start"), utm_crs = utm_crs)
+    add_utm_columns(ll_names = c("lon_start", "lat_start"), utm_crs = utm_crs)
 }
 
-# Models ---------------------------------------------------------------------
+# Run ------------------------------------------------------------------------
 
-# Same specifications as the corresponding models in fit_index_models(), fit
-# directly to skip the factor(year) template fit. Every occasion has data, so
-# extra_time only matters for documenting the time steps.
-fit_model <- function(model, d, mesh) {
-  args <- list(
-    formula = catch_weight ~ 1,
-    data = d,
-    mesh = mesh,
-    offset = log(d$effort),
-    family = family,
-    time = "year",
-    spatial = "on",
-    share_range = TRUE,
-    anisotropy = TRUE,
-    extra_time = seq(min(d$year), max(d$year)),
-    control = control,
-    silent = TRUE
-  )
-  factor_year <- list(formula = catch_weight ~ 0 + factor(year), extra_time = NULL)
-  rw_year <- list(time_varying = ~1, time_varying_type = "rw0", priors = rw_prior)
-  extra <- switch(model,
-    "IID RF, factor(year)" = c(spatiotemporal = "iid", factor_year),
-    "AR1 RF, factor(year)" = c(spatiotemporal = "ar1", factor_year),
-    "IID RF, RW year" = c(spatiotemporal = "iid", rw_year),
-    "RW RF" = list(spatiotemporal = "rw"),
-    "RW RF, RW year" = c(spatiotemporal = "rw", rw_year),
-    "AR1 RF, RW year" = c(spatiotemporal = "ar1", rw_year)
-  )
-  args[names(extra)] <- extra
-  do.call(sdmTMB, args)
-}
-
-# Operating model and simulation ---------------------------------------------
-
-# Fit the operating model to one species and simulate its replicates. Returns
-# only what the replicate fits and metrics need (not the fitted model).
-setup_species <- function(species) {
-  RhpcBLASctl::blas_set_num_threads(1L)
-  RhpcBLASctl::omp_set_num_threads(1L)
-
-  dat <- prepare_species_data(species)
+setup_species <- function(species, dat) {
   is_sampled <- dat$region == dat$primary_region
-  grid <- sdmTMB::replicate_df(base_grid, "year", sort(unique(dat$year)))
   mesh <- make_mesh(dat, c("X", "Y"), cutoff = mesh_cutoff)
-  mesh_alt <- make_mesh(dat[is_sampled, ], c("X", "Y"), mesh = mesh$mesh)
-
-  # As fit_ok(), but a failed operating model returns its diagnostics (cached
-  # in setups/) instead of NULL so the cause can be seen without refitting
-  fit_om <- tryCatch(fit_model(om_model, dat, mesh), error = \(e) e)
-  if (!inherits(fit_om, "sdmTMB")) {
-    cli::cli_warn("Operating model errored for {species}: {conditionMessage(fit_om)}")
-    return(list(species = species, om_failed = TRUE, error = conditionMessage(fit_om)))
-  }
-  checks <- tryCatch(
-    unlist(sdmTMB::sanity(fit_om, gradient_thresh = 0.01, silent = TRUE)),
-    error = \(e) c(sanity_error = FALSE)
-  )
-  # Kept for every species to check the fitted field SDs and ranges
-  tidy_ok <- \(...) tryCatch(sdmTMB::tidy(fit_om, ...), error = \(e) NULL)
-  om_ran_pars <- bind_rows(
-    mutate(tidy_ok("ran_pars", model = 1), model = "encounter"),
-    mutate(tidy_ok("ran_pars", model = 2), model = "positive")
-  )
-  if (!all(checks)) {
-    cli::cli_warn("Operating model did not pass sanity checks for {species}")
-    return(list(
-      species = species,
-      om_failed = TRUE,
-      sanity = checks,
-      pd_hessian = fit_om$pos_def_hessian,
-      convergence = fit_om$model$message,
-      gradients = tibble::tibble(
-        par = names(fit_om$model$par),
-        est = unname(fit_om$model$par),
-        gradient = as.numeric(fit_om$gradients)
-      ),
-      ran_pars = om_ran_pars
-    ))
-  }
-
-  # Tows and grid cells in one newdata so both share the same field draws.
-  # eta_i excludes the offset, so grid rows give expected density per unit
-  # area; the simulated tow catches include the effort offset.
-  sim_newdata <- bind_rows(
-    select(dat, X, Y, year, effort),
-    mutate(select(grid, X, Y, year), effort = 1)
-  )
-  is_tow <- seq_len(nrow(sim_newdata)) <= nrow(dat)
-
-  # Fixed effects at their MLEs. Each replicate takes a new draw of the random
-  # effects from their approximate posterior (mle_mvn_samples = "multiple");
-  # those in simulate_re are then replaced by entirely new draws from the GMRF
-  # prior. So the spatial fields are posterior draws (unless resample_spatial)
-  # and the spatiotemporal fields are new.
-  sim_reports <- simulate(
-    fit_om,
-    nsim = n_reps,
-    type = "mle-mvn",
-    mle_mvn_samples = "multiple",
-    simulate_re = if (resample_spatial) c("spatial", "spatiotemporal") else "spatiotemporal",
-    newdata = sim_newdata,
-    offset = log(sim_newdata$effort),
-    return_tmb_report = TRUE,
-    seed = 42,
-    silent = TRUE
-  )
-
-  true_indexes <- purrr::imap_dfr(sim_reports, \(r, rep) {
-    grid |>
-      mutate(density = exp(r$eta_i[!is_tow, 1L] + r$eta_i[!is_tow, 2L]) * area) |>
-      group_by(year) |>
-      summarise(true_est = sum(density)) |>
-      mutate(rep = rep, .before = 1L)
-  })
-
-  list(
+  setup <- sim_setup(
     species = species,
     dat = dat,
     is_sampled = is_sampled,
-    grid = grid,
+    grid = replicate_df(base_grid, "year", sort(unique(dat$year))),
     mesh = mesh,
-    mesh_alt = mesh_alt,
-    occasions = distinct(dat, year, cal_year, primary_region),
-    catches = lapply(sim_reports, \(r) r$y_i[is_tow, 1L] * r$y_i[is_tow, 2L]),
-    true_indexes = true_indexes,
-    ran_pars = om_ran_pars
+    mesh_alt = make_mesh(dat[is_sampled, ], c("X", "Y"), mesh = mesh$mesh),
+    occasions = distinct(dat, year, cal_year, primary_region, phase)
   )
+  om <- fit_operating_model(om_model, dat, mesh)
+  if (isTRUE(om$om_failed)) return(c(list(species = species), om))
+  c(setup, list(fit_om = om$fit, ran_pars = om$ran_pars))
 }
 
-# Fit replicates --------------------------------------------------------------
-
-# One model fit to one replicate: the operating model to the full simulated
-# data or an alternating model to the sampled half. Returns an empty tibble if
-# the fit fails sanity checks.
-fit_task <- function(setup, catch, rep, model, design) {
-  RhpcBLASctl::blas_set_num_threads(1L)
-  RhpcBLASctl::omp_set_num_threads(1L)
-
-  d <- setup$dat
-  d$catch_weight <- catch
-  mesh <- setup$mesh
-  if (design == "alternating") {
-    d <- d[setup$is_sampled, ]
-    mesh <- setup$mesh_alt
-  }
-
-  fit <- fit_ok(fit_model(model, d, mesh))
-  if (is.null(fit)) return(tibble::tibble())
-  model_label <- if (design == "full") paste0(model, " (full data)") else model
-  get_index_ok(fit, setup$grid, nsplit = index_nsplit) |>
-    mutate(species = setup$species, rep = rep, design = design, model = model_label, .before = 1L)
-}
-
-if (FALSE) {
-  tictoc::tic()
-  s <- setup_species("lingcod")
-  tictoc::toc()
-  tictoc::tic()
-  x <- fit_task(s, s$catches[[1L]], 1L, "RW RF", "alternating")
-  tictoc::toc()
-}
-
-# One cache file per species; delete a file to refit that species. Each
-# species' setup (operating model + simulation) and each species x replicate x
-# model fit are also cached as they finish, in setups/ and fits/, so a run can
-# be monitored and restarted where it left off; delete those too to refit from
-# scratch.
-# Monitor with: tail -f data-generated/nwfsc-split-self-test/progress.log
-fits_dir <- here::here("data-generated/nwfsc-split-self-test")
-setups_dir <- file.path(fits_dir, "setups")
-tasks_dir <- file.path(fits_dir, "fits")
-dir.create(setups_dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(tasks_dir, recursive = TRUE, showWarnings = FALSE)
-slug <- \(x) gsub("^-|-$", "", gsub("[^a-z0-9]+", "-", tolower(x)))
-fits_file <- \(species) file.path(fits_dir, paste0(slug(species), ".rds"))
-setup_file <- \(species) file.path(setups_dir, paste0(slug(species), ".rds"))
-task_file <- \(species, rep, design, model) {
-  file.path(tasks_dir, sprintf("%s-rep%02d-%s-%s.rds", slug(species), rep, design, slug(model)))
-}
-progress_log <- file.path(fits_dir, "progress.log")
-
-log_progress <- function(...) {
-  cat(format(Sys.time(), "%Y-%m-%d %H:%M:%S "), ..., "\n", sep = "", file = progress_log, append = TRUE)
-}
-minutes_since <- \(t0) round(as.numeric(difftime(Sys.time(), t0, units = "mins")), 1)
-
-# Errors are logged and not cached, so a rerun retries that task. A failed
-# setup (operating model errored or failed sanity checks; om_failed = TRUE with
-# its diagnostics) or empty fit (failed sanity checks) is cached so it isn't
-# refit. Inspect a failed setup with, e.g.:
-#   s <- readRDS(setup_file("dover sole")); s$sanity; s$ran_pars
-#   dplyr::arrange(s$gradients, -abs(gradient))
-run_setup <- function(species) {
-  t0 <- Sys.time()
-  log_progress("start setup: ", species)
-  tryCatch(
-    {
-      setup <- setup_species(species)
-      saveRDS(setup, setup_file(species))
-      failed <- if (isTRUE(setup$om_failed)) {
-        why <- if (!is.null(setup$error)) setup$error else paste(names(setup$sanity)[!setup$sanity], collapse = ", ")
-        paste0(" (OM FAILED: ", why, ")")
-      }
-      log_progress("done setup: ", species, failed, " [", minutes_since(t0), " min]")
-    },
-    error = \(e) log_progress("ERROR setup: ", species, ": ", conditionMessage(e))
-  )
-  invisible(NULL)
-}
-
-run_task <- function(setup, catch, rep, model, design, file) {
-  t0 <- Sys.time()
-  label <- paste0(setup$species, " rep ", rep, " ", model, " (", design, ")")
-  tryCatch(
-    {
-      out <- fit_task(setup, catch, rep, model, design)
-      saveRDS(out, file)
-      log_progress(
-        "done: ", label, if (nrow(out) == 0L) " FAILED SANITY", " [", minutes_since(t0), " min; ",
-        length(list.files(tasks_dir)), "/", n_task_files, " fits cached]"
-      )
-    },
-    error = \(e) log_progress("ERROR: ", label, ": ", conditionMessage(e))
-  )
-  invisible(NULL)
-}
-
-read_if_exists <- \(f) if (file.exists(f)) readRDS(f)
-
-to_fit <- species_to_fit[!file.exists(fits_file(species_to_fit))]
-if (length(to_fit) > 0L) {
-  future::plan(future::multisession, workers = n_workers)
-  log_progress("=== run started: ", length(to_fit), " species, ", n_reps, " reps each, ", n_workers, " workers ===")
-
-  setup_todo <- to_fit[!file.exists(setup_file(to_fit))]
-  furrr::future_walk(
-    setup_todo, run_setup,
-    .options = furrr::furrr_options(seed = TRUE, scheduling = Inf)
-  )
-  setups <- purrr::compact(lapply(setup_file(to_fit), read_if_exists)) |>
-    purrr::discard(\(s) isTRUE(s$om_failed))
-
-  # One species x replicate x model per future so the workers stay busy and a
-  # slow fit doesn't hold up others. Replicates are the outer loop so complete
-  # replicates accumulate across species as the run goes.
-  designs <- tibble::tibble(
+results <- run_self_test(
+  dir = here::here("data-generated/nwfsc-split-self-test"),
+  species = species_to_fit,
+  n_reps = n_reps,
+  prepare_data = prepare_species_data,
+  setup_species = setup_species,
+  simulate_rep = simulate_one_arm(
+    if (resample_spatial) c("spatial", "spatiotemporal") else "spatiotemporal"
+  ),
+  models = tibble::tibble(
     design = c("full", rep("alternating", length(alternating_models))),
     model = c(om_model, alternating_models)
-  )
-  tasks <- tidyr::expand_grid(rep = seq_len(n_reps), i = seq_along(setups), designs) |>
-    mutate(
-      species = purrr::map_chr(i, \(i) setups[[i]]$species),
-      file = task_file(species, rep, design, model)
-    )
-  todo <- tasks[!file.exists(tasks$file), ]
-  n_task_files <- nrow(tasks)
-  log_progress(nrow(todo), " of ", nrow(tasks), " fits to run")
-
-  # Each future gets only what its fit needs: its species' data, grid, and
-  # meshes plus its replicate's catches (not all setups or replicates)
-  setups_lite <- lapply(setups, \(s) s[c("species", "dat", "is_sampled", "grid", "mesh", "mesh_alt")])
-  furrr::future_pwalk(
-    list(
-      setup = lapply(todo$i, \(i) setups_lite[[i]]),
-      catch = purrr::map2(todo$i, todo$rep, \(i, rep) setups[[i]]$catches[[rep]]),
-      rep = todo$rep,
-      model = todo$model,
-      design = todo$design,
-      file = todo$file
-    ),
-    run_task,
-    .options = furrr::furrr_options(seed = TRUE, scheduling = Inf)
-  )
-  future::plan(future::sequential)
-
-  # Combine a species only once all its fits have finished
-  for (i in seq_along(setups)) {
-    files <- tasks$file[tasks$i == i]
-    if (!all(file.exists(files))) {
-      cli::cli_warn("{setups[[i]]$species}: {sum(!file.exists(files))} fit(s) missing; see {progress_log}")
-      next
-    }
-    saveRDS(
-      list(
-        indexes = bind_rows(lapply(files, readRDS)),
-        true_indexes = mutate(setups[[i]]$true_indexes, species = setups[[i]]$species, .before = 1L),
-        occasions = mutate(setups[[i]]$occasions, species = setups[[i]]$species, .before = 1L)
-      ),
-      fits_file(setups[[i]]$species)
-    )
-  }
-  log_progress("=== run finished ===")
-}
-
-self_test <- lapply(fits_file(species_to_fit), \(f) if (file.exists(f)) readRDS(f))
-indexes <- purrr::map_dfr(self_test, "indexes")
-true_indexes <- purrr::map_dfr(self_test, "true_indexes")
-occasions <- purrr::map_dfr(self_test, "occasions")
-
-# Performance metrics ----------------------------------------------------------
-
-compared <- indexes |>
-  left_join(true_indexes, by = c("species", "rep", "year")) |>
-  left_join(occasions, by = c("species", "year")) |>
-  mutate(log_error = log_est - log(true_est))
-
-for (level in ci_levels) {
-  q <- qnorm(1 - (1 - level) / 2)
-  compared[[paste0("covered_", level * 100)]] <- abs(compared$log_error) <= q * compared$se
-}
-
-# Phase follows which half was sampled
-seesaw_A <- function(est, primary_region, year) {
-  as_tibble(t(period2_metric(
-    est,
-    year = year,
-    phase = if_else(primary_region == "North", 0.5, -0.5)
-  )))
-}
-
-# Maximum A across moving windows
-seesaw_A_max <- function(est, primary_region, year) {
-  mw <- moving_window(
-    est,
-    year = year,
-    window = seesaw_window,
-    phase = if_else(primary_region == "North", 0.5, -0.5)
-  )
-  max(mw$A)
-}
-
-metrics_rep <- compared |>
-  arrange(species, rep, model, year) |>
-  group_by(species, rep, model) |>
-  summarise(
-    rmse = sqrt(mean(log_error^2)),
-    bias = mean(log_error),
-    coverage_50 = mean(covered_50),
-    coverage_95 = mean(covered_95),
-    A = seesaw_A(est, primary_region, year)$A,
-    A_max = seesaw_A_max(est, primary_region, year),
-    .groups = "drop"
-  )
-
-A_truth <- true_indexes |>
-  left_join(occasions, by = c("species", "year")) |>
-  arrange(species, rep, year) |>
-  group_by(species, rep) |>
-  summarise(
-    A = seesaw_A(true_est, primary_region, year)$A,
-    A_max = seesaw_A_max(true_est, primary_region, year),
-    .groups = "drop"
-  )
-
-metrics <- metrics_rep |>
-  group_by(species, model) |>
-  summarise(
-    n_reps = n(),
-    rmse = mean(rmse),
-    bias = mean(bias),
-    coverage_50 = mean(coverage_50),
-    coverage_95 = mean(coverage_95),
-    A_median = median(A),
-    A_max_median = median(A_max),
-    .groups = "drop"
-  ) |>
-  arrange(species, rmse)
-
-saveRDS(
-  list(compared = compared, metrics_rep = metrics_rep, metrics = metrics, A_truth = A_truth),
-  here::here("data-generated/nwfsc-split-self-test-metrics.rds")
+  ),
+  n_workers = n_workers,
+  index_nsplit = index_nsplit
 )
 
-metrics |>
+# Metrics and plots ------------------------------------------------------------
+
+m <- self_test_metrics(compare_to_truth(results), results, seesaw_window)
+saveRDS(m, here::here("data-generated/nwfsc-split-self-test-metrics.rds"))
+
+m$metrics |>
   mutate(across(where(is.numeric), \(x) round(x, 2))) |>
   print(n = Inf, width = Inf)
 
-# Plots ----------------------------------------------------------------------
-
-metric_levels <- c("rmse", "bias", "coverage_50", "coverage_95", "A", "A_max")
-metric_labels <- c(
-  "RMSE (log)", "Bias (log)", "50% CI coverage", "95% CI coverage",
-  "Seesaw A (%)", paste0("Max A, ", seesaw_window, "-survey windows (%)")
-)
-# Nominal values; for A and max A, the median of the true index by species
-nominal <- bind_rows(
-  tidyr::expand_grid(
-    species = unique(metrics_rep$species),
-    tibble::tibble(metric = c("bias", "coverage_50", "coverage_95"), value = c(0, 0.5, 0.95))
-  ),
-  A_truth |>
-    group_by(species) |>
-    summarise(A = median(A), A_max = median(A_max)) |>
-    tidyr::pivot_longer(c(A, A_max), names_to = "metric")
-) |>
-  mutate(metric = factor(metric, levels = metric_levels, labels = metric_labels))
-
-# Models ordered by mean RMSE across species
-model_order <- metrics |>
-  group_by(model) |>
-  summarise(rmse = mean(rmse)) |>
-  arrange(rmse) |>
-  pull(model)
-
-metrics_rep |>
-  tidyr::pivot_longer(all_of(metric_levels), names_to = "metric") |>
-  mutate(
-    model = factor(model, levels = rev(model_order)),
-    metric = factor(metric, levels = metric_levels, labels = metric_labels)
-  ) |>
-  ggplot(aes(value, model)) +
-  geom_vline(aes(xintercept = value), data = nominal, linetype = 2, colour = "grey50") +
-  geom_boxplot(outlier.shape = NA) +
-  geom_point(position = position_jitter(height = 0.15), alpha = 0.4) +
-  facet_grid(species ~ metric, scales = "free_x") +
-  labs(
-    x = NULL, y = NULL,
-    caption = paste0(
-      "WCGBTS alternating N / S self-test (split at ", round(split_lat, 2), " N), ",
-      n_reps, " replicates per species, OM: ", om_model,
-      if (resample_spatial) " (spatial fields new from prior). " else " (spatial fields posterior draws). ",
-      "Dashed lines: nominal values (A, max A: median of the true index)."
-    )
+plot_self_test(
+  m,
+  full_model = paste0(om_model, " (full data)"),
+  window = seesaw_window,
+  fig_prefix = here::here("figs/nwfsc-split-self-test"),
+  caption = paste0(
+    "WCGBTS alternating N / S self-test (split at ", round(split_lat, 2), " N), ",
+    n_reps, " replicates per species, OM: ", om_model,
+    if (resample_spatial) " (spatial fields new from prior). " else " (spatial fields posterior draws). ",
+    "Dashed lines: nominal values (A, max A: median of the true index). ",
+    "Seesaw error: estimated minus true phase effect, positive when the index reads high in occasions the richer region is sampled."
   )
-ggsave(
-  here::here("figs/nwfsc-split-self-test.pdf"),
-  width = 16, height = 1 + 2.2 * length(unique(metrics_rep$species))
-)
-
-# Summary across species: one point per species, each a summary across
-# replicates, scaled so species are comparable; violins show all replicates
-# pooled across species. RMSE is relative to the species' mean full-data
-# operating model RMSE (how much is lost by sampling one half per occasion).
-# Max A is the excess over the true index in the same replicate (spurious
-# seesaw from the model, not from the simulated population).
-summary_levels <- c("rmse_ratio", "coverage_50", "A_max_excess")
-summary_labels <- c("RMSE / full-data RMSE", "50% CI coverage", "Max A - true max A (%)")
-full_model <- paste0(om_model, " (full data)")
-
-rep_summary <- metrics_rep |>
-  left_join(select(A_truth, species, rep, A_max_true = A_max), by = c("species", "rep")) |>
-  group_by(species) |>
-  mutate(
-    rmse_ratio = rmse / mean(rmse[model == full_model]),
-    A_max_excess = A_max - A_max_true
-  ) |>
-  ungroup() |>
-  tidyr::pivot_longer(all_of(summary_levels), names_to = "metric") |>
-  mutate(
-    model = factor(model, levels = rev(model_order)),
-    metric = factor(metric, levels = summary_levels, labels = summary_labels)
-  )
-
-species_summary <- rep_summary |>
-  group_by(species, model, metric) |>
-  summarise(
-    value = if (grepl("A", first(metric))) median(value) else mean(value),
-    .groups = "drop"
-  )
-
-summary_nominal <- tibble::tibble(
-  metric = factor(summary_labels, levels = summary_labels),
-  value = c(1, 0.5, 0)
-)
-
-# Zoom each panel to the widest 10-90% quantile range of the replicates across
-# models, extended to keep the species points and nominal values in view.
-# oob_keep so the violins are still computed from all replicates (as with
-# coord_cartesian(), which can't be set per panel).
-summary_limits <- bind_rows(
-  rep_summary |>
-    group_by(metric, model) |>
-    summarise(lo = quantile(value, 0.1), hi = quantile(value, 0.9), .groups = "drop"),
-  rename(species_summary, lo = value) |> mutate(hi = lo),
-  rename(summary_nominal, lo = value) |> mutate(hi = lo)
-) |>
-  group_by(metric) |>
-  summarise(lo = min(lo), hi = max(hi)) |>
-  arrange(metric)
-summary_x_scales <- purrr::map2(
-  summary_limits$lo, summary_limits$hi,
-  \(lo, hi) scale_x_continuous(limits = c(lo, hi), oob = scales::oob_keep)
-)
-
-ggplot(species_summary, aes(value, model)) +
-  geom_violin(data = rep_summary, fill = "grey90", colour = NA, scale = "width") +
-  geom_vline(aes(xintercept = value), data = summary_nominal, linetype = 2, colour = "grey50") +
-  stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
-  geom_point(aes(colour = species), position = position_jitter(height = 0.15, seed = 1)) +
-  facet_wrap(~metric, nrow = 1, scales = "free_x") +
-  ggh4x::facetted_pos_scales(x = summary_x_scales) +
-  scale_colour_brewer(palette = "Dark2", labels = tools::toTitleCase) +
-  labs(x = NULL, y = NULL, colour = NULL) +
-  theme(legend.position = "bottom", plot.margin = margin(5.5, 12, 5.5, 5.5)) +
-  guides(colour = guide_legend(nrow = 2))
-ggsave(here::here("figs/nwfsc-split-self-test-summary.pdf"), width = 9, height = 4)
-
-compared |>
-  filter(rep <= 3) |>
-  ggplot(aes(cal_year, est, colour = model)) +
-  geom_line(aes(y = true_est), colour = "black") +
-  geom_line() +
-  facet_grid(species ~ rep, scales = "free_y", labeller = labeller(rep = label_both)) +
-  labs(x = "Year", y = "Biomass index", colour = "Model", caption = "Black: true index")
-ggsave(
-  here::here("figs/nwfsc-split-self-test-indexes.pdf"),
-  width = 11, height = 1 + 2 * length(unique(compared$species))
 )

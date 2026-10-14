@@ -2,6 +2,8 @@
 # Survey-specific scripts prepare `dat`, `grid`, and `mesh` and call
 # `fit_index_models()`.
 
+source(here::here("analysis/priors.R"))
+
 # Returns the fit if it ran and passed sanity checks, otherwise NULL
 fit_ok <- function(expr) {
   fit <- tryCatch(expr, error = \(e) NULL)
@@ -55,7 +57,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, covariat
   depth_formula <- stats::as.formula(paste(
     ". ~", paste(c("0 + factor(year)", covariates, "poly(log(depth_m), 2)"), collapse = " + ")
   ))
-  rw_prior <- sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::lognormal_prior(log(0.3), 0.5))
+  rw_prior <- sdmTMB::sdmTMBpriors(sigma_V = sigma_V_prior(0.3, 0.5))
 
   # The base fit is the update() template for the other models, so keep it
   # even if it fails sanity checks; it is only reported if it passes.

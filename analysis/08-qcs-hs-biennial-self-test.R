@@ -13,21 +13,19 @@
 # 3. Keep the biennial subset of the simulated tows (one region per occasion,
 #    alternating HS / QCS) and fit the biennial models. Also refit the
 #    operating model to the full simulated data as a calibration check.
-# 4. Score RMSE, bias, CI coverage, and seesaw A against the known truth.
+# 4. Score RMSE, bias, CI coverage, seesaw A, and the signed seesaw error
+#    against the known truth.
+#
+# The pipeline and metrics are in analysis/self-test-funcs.R. Everything is
+# cached per replicate, so n_reps can be raised later and only the new
+# replicates are run.
 
-library(dplyr)
-library(ggplot2)
-library(sdmTMB)
-
+source(here::here("analysis/self-test-funcs.R"))
 theme_set(ggsidekick::theme_sleek())
-
-source(here::here("analysis/fit-index-models.R"))
-source(here::here("analysis/metric-functions.R"))
 
 surveyjoin::cache_data()
 surveyjoin::load_sql_data()
 
-survey_names <- c("SYN QCS", "SYN HS")
 # Strong to moderate seesaws under biennial QCS / HS sampling across a range of
 # taxa, plus arrowtooth flounder as a control with almost none; see
 # analysis/qcs-hs-biennial-screen.R
@@ -44,11 +42,11 @@ species_to_fit <- c(
   "shortspine thornyhead"
 )
 n_reps <- 20L
-ci_levels <- c(0.5, 0.95)
 # Moving window (in survey occasions) for max A; as in
 # analysis/05-qcs-hs-experimental-biennial.R. With 11 occasions, 8 gives 4
 # windows (10, as in the annual-survey scripts, would give only 2).
 seesaw_window <- 8L
+n_workers <- max(1L, min(60L, future::availableCores() - 2L))
 
 # Operating model, also refit to the full simulated data for calibration. IID
 # spatiotemporal fields: with AR1, rho can go to ~1, so each replicate's new
@@ -69,429 +67,55 @@ biennial_models <- c(
   "AR1 RF, RW year"
 )
 
-family <- delta_gamma(type = "poisson-link")
-# Drop random fields with SDs collapsing to zero (e.g., the encounter
-# spatiotemporal field with biennial data)
-control <- sdmTMBcontrol(collapse_spatial_variance = TRUE)
-rw_prior <- sdmTMBpriors(sigma_V = lognormal_prior(log(0.3), 0.5))
+# Run ------------------------------------------------------------------------
 
-# Data -----------------------------------------------------------------------
+qcs_hs_base_grid <- qcs_hs_grid()
 
-# Model time as survey occasion: QCS + HS years are all odd, so on the
-# calendar-year scale extra_time puts an empty year between every survey and
-# AR1 rho gets stuck at its starting value of 0 (only rho^2 is identified).
-prepare_species_data <- function(species) {
-  dat <- surveyjoin::get_data(species, regions = "pbs") |>
-    mutate(year = lubridate::year(lubridate::ymd(date))) |>
-    filter(survey_name %in% survey_names, effort > 0) |>
-    select(survey_name, year, lon_start, lat_start, depth_m, effort, catch_weight) |>
-    tidyr::drop_na()
-
-  # QCS was sampled alone in 2003 and 2004; keep years with both surveys
-  complete_years <- dat |>
-    distinct(year, survey_name) |>
-    count(year) |>
-    filter(n == length(survey_names)) |>
-    pull(year)
-
-  dat |>
-    filter(year %in% complete_years) |>
-    mutate(
-      occasion = match(year, sort(unique(year))),
-      primary_survey = if_else(occasion %% 2L == 1L, "SYN HS", "SYN QCS"),
-      cal_year = year,
-      year = occasion
-    ) |>
-    sdmTMB::add_utm_columns(ll_names = c("lon_start", "lat_start"), utm_crs = 3156)
+setup_species <- function(species, dat) {
+  setup <- qcs_hs_setup(species, dat, qcs_hs_base_grid)
+  om <- fit_operating_model(om_model, dat, setup$mesh)
+  if (isTRUE(om$om_failed)) return(c(list(species = species), om))
+  c(setup, list(fit_om = om$fit, ran_pars = om$ran_pars))
 }
 
-base_grid <- surveyjoin::dfo_synoptic_grid |>
-  filter(survey %in% survey_names) |>
-  sdmTMB::add_utm_columns(c("lon", "lat"), utm_crs = 3156)
-
-# Models ---------------------------------------------------------------------
-
-# Same specifications as the corresponding models in fit_index_models(), fit
-# directly to skip the factor(year) template fit. Every occasion has data, so
-# extra_time only matters for documenting the time steps.
-fit_model <- function(model, d, mesh) {
-  args <- list(
-    formula = catch_weight ~ 1,
-    data = d,
-    mesh = mesh,
-    offset = log(d$effort),
-    family = family,
-    time = "year",
-    spatial = "on",
-    share_range = TRUE,
-    anisotropy = TRUE,
-    extra_time = seq(min(d$year), max(d$year)),
-    control = control,
-    silent = TRUE
-  )
-  factor_year <- list(formula = catch_weight ~ 0 + factor(year), extra_time = NULL)
-  rw_year <- list(time_varying = ~1, time_varying_type = "rw0", priors = rw_prior)
-  extra <- switch(model,
-    "IID RF, factor(year)" = c(spatiotemporal = "iid", factor_year),
-    "AR1 RF, factor(year)" = c(spatiotemporal = "ar1", factor_year),
-    "IID RF, RW year" = c(spatiotemporal = "iid", rw_year),
-    "RW RF" = list(spatiotemporal = "rw"),
-    "RW RF, RW year" = c(spatiotemporal = "rw", rw_year),
-    "AR1 RF, RW year" = c(spatiotemporal = "ar1", rw_year)
-  )
-  args[names(extra)] <- extra
-  do.call(sdmTMB, args)
-}
-
-# Operating model and simulation ---------------------------------------------
-
-# Fit the operating model to one species and simulate its replicates. Returns
-# only what the replicate fits and metrics need (not the fitted model).
-setup_species <- function(species) {
-  RhpcBLASctl::blas_set_num_threads(1L)
-  RhpcBLASctl::omp_set_num_threads(1L)
-
-  dat <- prepare_species_data(species)
-  is_biennial <- dat$survey_name == dat$primary_survey
-  grid <- sdmTMB::replicate_df(base_grid, "year", sort(unique(dat$year)))
-  mesh <- make_mesh(dat, c("X", "Y"), cutoff = 10)
-  mesh_biennial <- make_mesh(dat[is_biennial, ], c("X", "Y"), mesh = mesh$mesh)
-
-  fit_om <- fit_ok(fit_model(om_model, dat, mesh))
-  if (is.null(fit_om)) {
-    cli::cli_warn("Operating model did not pass sanity checks for {species}")
-    return(NULL)
-  }
-
-  # Tows and grid cells in one newdata so both share the same field draws.
-  # eta_i excludes the offset, so grid rows give expected density per unit
-  # area; the simulated tow catches include the effort offset.
-  sim_newdata <- bind_rows(
-    select(dat, X, Y, year, effort),
-    mutate(select(grid, X, Y, year), effort = 1)
-  )
-  is_tow <- seq_len(nrow(sim_newdata)) <= nrow(dat)
-
-  # Fixed effects at their MLEs. Each replicate takes a new draw of the random
-  # effects from their approximate posterior (mle_mvn_samples = "multiple");
-  # those in simulate_re are then replaced by entirely new draws from the GMRF
-  # prior. So the spatial fields are posterior draws (unless resample_spatial)
-  # and the spatiotemporal fields are new.
-  sim_reports <- simulate(
-    fit_om,
-    nsim = n_reps,
-    type = "mle-mvn",
-    mle_mvn_samples = "multiple",
-    simulate_re = if (resample_spatial) c("spatial", "spatiotemporal") else "spatiotemporal",
-    newdata = sim_newdata,
-    offset = log(sim_newdata$effort),
-    return_tmb_report = TRUE,
-    seed = 42,
-    silent = TRUE
-  )
-
-  true_indexes <- purrr::imap_dfr(sim_reports, \(r, rep) {
-    grid |>
-      mutate(density = exp(r$eta_i[!is_tow, 1L] + r$eta_i[!is_tow, 2L]) * area) |>
-      group_by(year) |>
-      summarise(true_est = sum(density)) |>
-      mutate(rep = rep, .before = 1L)
-  })
-
-  list(
-    species = species,
-    dat = dat,
-    is_biennial = is_biennial,
-    grid = grid,
-    mesh = mesh,
-    mesh_biennial = mesh_biennial,
-    occasions = distinct(dat, year, cal_year, primary_survey),
-    catches = lapply(sim_reports, \(r) r$y_i[is_tow, 1L] * r$y_i[is_tow, 2L]),
-    true_indexes = true_indexes
-  )
-}
-
-# Fit replicates --------------------------------------------------------------
-
-fit_rep <- function(setup, rep) {
-  RhpcBLASctl::blas_set_num_threads(1L)
-  RhpcBLASctl::omp_set_num_threads(1L)
-
-  d <- setup$dat
-  d$catch_weight <- setup$catches[[rep]]
-
-  index_ok <- function(model, d, mesh) {
-    fit <- fit_ok(fit_model(model, d, mesh))
-    if (is.null(fit)) tibble::tibble() else get_index_ok(fit, setup$grid)
-  }
-
-  bind_rows(
-    full = index_ok(om_model, d, setup$mesh) |> mutate(model = om_model),
-    biennial = purrr::map(
-      biennial_models,
-      \(m) index_ok(m, d[setup$is_biennial, ], setup$mesh_biennial)
-    ) |>
-      setNames(biennial_models) |>
-      bind_rows(.id = "model"),
-    .id = "design"
-  ) |>
-    mutate(
-      model = if_else(design == "full", paste0(model, " (full data)"), model),
-      species = setup$species,
-      rep = rep,
-      .before = 1L
-    )
-}
-
-# One cache file per species; delete a file to refit that species
-fits_dir <- here::here("data-generated/qcs-hs-biennial-self-test")
-dir.create(fits_dir, showWarnings = FALSE)
-fits_file <- \(species) file.path(fits_dir, paste0(gsub(" ", "-", species), ".rds"))
-
-to_fit <- species_to_fit[!file.exists(fits_file(species_to_fit))]
-if (length(to_fit) > 0L) {
-  future::plan(future::multisession, workers = future::availableCores() / 2)
-  setups <- furrr::future_map(
-    to_fit, setup_species,
-    .options = furrr::furrr_options(seed = TRUE, scheduling = Inf)
-  ) |>
-    purrr::compact()
-
-  # One species x replicate per future so a slow fit doesn't hold up a chunk
-  tasks <- tidyr::expand_grid(i = seq_along(setups), rep = seq_len(n_reps))
-  rep_indexes <- furrr::future_map2(
-    tasks$i, tasks$rep, \(i, rep) fit_rep(setups[[i]], rep),
-    .options = furrr::furrr_options(seed = TRUE, scheduling = Inf)
-  )
-  future::plan(future::sequential)
-
-  for (i in seq_along(setups)) {
-    saveRDS(
-      list(
-        indexes = bind_rows(rep_indexes[tasks$i == i]),
-        true_indexes = mutate(setups[[i]]$true_indexes, species = setups[[i]]$species, .before = 1L),
-        occasions = mutate(setups[[i]]$occasions, species = setups[[i]]$species, .before = 1L)
-      ),
-      fits_file(setups[[i]]$species)
-    )
-  }
-}
-
-self_test <- lapply(fits_file(species_to_fit), \(f) if (file.exists(f)) readRDS(f))
-indexes <- purrr::map_dfr(self_test, "indexes")
-true_indexes <- purrr::map_dfr(self_test, "true_indexes")
-occasions <- purrr::map_dfr(self_test, "occasions")
-
-# Performance metrics ----------------------------------------------------------
-
-compared <- indexes |>
-  left_join(true_indexes, by = c("species", "rep", "year")) |>
-  left_join(occasions, by = c("species", "year")) |>
-  mutate(log_error = log_est - log(true_est))
-
-for (level in ci_levels) {
-  q <- qnorm(1 - (1 - level) / 2)
-  compared[[paste0("covered_", level * 100)]] <- abs(compared$log_error) <= q * compared$se
-}
-
-# Phase follows which region was sampled, not calendar-year parity
-seesaw_A <- function(est, primary_survey, year) {
-  as_tibble(t(period2_metric(
-    est,
-    year = year,
-    phase = if_else(primary_survey == "SYN HS", 0.5, -0.5)
-  )))
-}
-
-# Maximum A across moving windows
-seesaw_A_max <- function(est, primary_survey, year) {
-  mw <- moving_window(
-    est,
-    year = year,
-    window = seesaw_window,
-    phase = if_else(primary_survey == "SYN HS", 0.5, -0.5)
-  )
-  max(mw$A)
-}
-
-metrics_rep <- compared |>
-  arrange(species, rep, model, year) |>
-  group_by(species, rep, model) |>
-  summarise(
-    rmse = sqrt(mean(log_error^2)),
-    bias = mean(log_error),
-    coverage_50 = mean(covered_50),
-    coverage_95 = mean(covered_95),
-    A = seesaw_A(est, primary_survey, year)$A,
-    A_max = seesaw_A_max(est, primary_survey, year),
-    .groups = "drop"
-  )
-
-A_truth <- true_indexes |>
-  left_join(occasions, by = c("species", "year")) |>
-  arrange(species, rep, year) |>
-  group_by(species, rep) |>
-  summarise(
-    A = seesaw_A(true_est, primary_survey, year)$A,
-    A_max = seesaw_A_max(true_est, primary_survey, year),
-    .groups = "drop"
-  )
-
-metrics <- metrics_rep |>
-  group_by(species, model) |>
-  summarise(
-    n_reps = n(),
-    rmse = mean(rmse),
-    bias = mean(bias),
-    coverage_50 = mean(coverage_50),
-    coverage_95 = mean(coverage_95),
-    A_median = median(A),
-    A_max_median = median(A_max),
-    .groups = "drop"
-  ) |>
-  arrange(species, rmse)
-
-saveRDS(
-  list(compared = compared, metrics_rep = metrics_rep, metrics = metrics, A_truth = A_truth),
-  here::here("data-generated/qcs-hs-biennial-self-test-metrics.rds")
+results <- run_self_test(
+  dir = here::here("data-generated/qcs-hs-biennial-self-test"),
+  species = species_to_fit,
+  n_reps = n_reps,
+  prepare_data = qcs_hs_data,
+  setup_species = setup_species,
+  simulate_rep = simulate_one_arm(
+    if (resample_spatial) c("spatial", "spatiotemporal") else "spatiotemporal"
+  ),
+  models = tibble::tibble(
+    design = c("full", rep("alternating", length(biennial_models))),
+    model = c(om_model, biennial_models)
+  ),
+  n_workers = n_workers
 )
 
-metrics |>
+# Metrics and plots ------------------------------------------------------------
+
+m <- self_test_metrics(compare_to_truth(results), results, seesaw_window)
+saveRDS(m, here::here("data-generated/qcs-hs-biennial-self-test-metrics.rds"))
+
+m$metrics |>
   mutate(across(where(is.numeric), \(x) round(x, 2))) |>
   print(n = Inf, width = Inf)
 
-A_truth |>
+m$A_truth |>
   group_by(species) |>
   summarise(A_median = median(A), A_max_median = median(A_max))
 
-# Plots ----------------------------------------------------------------------
-
-metric_levels <- c("rmse", "bias", "coverage_50", "coverage_95", "A", "A_max")
-metric_labels <- c(
-  "RMSE (log)", "Bias (log)", "50% CI coverage", "95% CI coverage",
-  "Seesaw A (%)", paste0("Max A, ", seesaw_window, "-survey windows (%)")
-)
-# Nominal values; for A and max A, the median of the true index by species
-nominal <- bind_rows(
-  tidyr::expand_grid(
-    species = unique(metrics_rep$species),
-    tibble::tibble(metric = c("bias", "coverage_50", "coverage_95"), value = c(0, 0.5, 0.95))
-  ),
-  A_truth |>
-    group_by(species) |>
-    summarise(A = median(A), A_max = median(A_max)) |>
-    tidyr::pivot_longer(c(A, A_max), names_to = "metric")
-) |>
-  mutate(metric = factor(metric, levels = metric_levels, labels = metric_labels))
-
-# Models ordered by mean RMSE across species
-model_order <- metrics |>
-  group_by(model) |>
-  summarise(rmse = mean(rmse)) |>
-  arrange(rmse) |>
-  pull(model)
-
-metrics_rep |>
-  tidyr::pivot_longer(all_of(metric_levels), names_to = "metric") |>
-  mutate(
-    model = factor(model, levels = rev(model_order)),
-    metric = factor(metric, levels = metric_levels, labels = metric_labels)
-  ) |>
-  ggplot(aes(value, model)) +
-  geom_vline(aes(xintercept = value), data = nominal, linetype = 2, colour = "grey50") +
-  geom_boxplot(outlier.shape = NA) +
-  geom_point(position = position_jitter(height = 0.15), alpha = 0.4) +
-  facet_grid(species ~ metric, scales = "free_x") +
-  labs(
-    x = NULL, y = NULL,
-    caption = paste0(
-      "Biennial QCS/HS self-test, ", n_reps, " replicates per species, OM: ", om_model,
-      if (resample_spatial) " (spatial fields new from prior). " else " (spatial fields posterior draws). ",
-      "Dashed lines: nominal values (A, max A: median of the true index)."
-    )
+plot_self_test(
+  m,
+  full_model = paste0(om_model, " (full data)"),
+  window = seesaw_window,
+  fig_prefix = here::here("figs/qcs-hs-biennial-self-test"),
+  caption = paste0(
+    "Biennial QCS/HS self-test, ", n_reps, " replicates per species, OM: ", om_model,
+    if (resample_spatial) " (spatial fields new from prior). " else " (spatial fields posterior draws). ",
+    "Dashed lines: nominal values (A, max A: median of the true index). ",
+    "Seesaw error: estimated minus true phase effect, positive when the index reads high in occasions the richer region is sampled."
   )
-ggsave(
-  here::here("figs/qcs-hs-biennial-self-test.pdf"),
-  width = 16, height = 1 + 2.2 * length(unique(metrics_rep$species))
-)
-
-# Summary across species: one point per species, each a summary across
-# replicates, scaled so species are comparable; violins show all replicates
-# pooled across species. RMSE is relative to the species' mean full-data
-# operating model RMSE (how much is lost by sampling one region per occasion).
-# Max A is the excess over the true index in the same replicate (spurious
-# seesaw from the model, not from the simulated population).
-summary_levels <- c("rmse_ratio", "coverage_50", "A_max_excess")
-summary_labels <- c("RMSE / full-data RMSE", "50% CI coverage", "Max A - true max A (%)")
-full_model <- paste0(om_model, " (full data)")
-
-rep_summary <- metrics_rep |>
-  left_join(select(A_truth, species, rep, A_max_true = A_max), by = c("species", "rep")) |>
-  group_by(species) |>
-  mutate(
-    rmse_ratio = rmse / mean(rmse[model == full_model]),
-    A_max_excess = A_max - A_max_true
-  ) |>
-  ungroup() |>
-  tidyr::pivot_longer(all_of(summary_levels), names_to = "metric") |>
-  mutate(
-    model = factor(model, levels = rev(model_order)),
-    metric = factor(metric, levels = summary_levels, labels = summary_labels)
-  )
-
-species_summary <- rep_summary |>
-  group_by(species, model, metric) |>
-  summarise(
-    value = if (grepl("A", first(metric))) median(value) else mean(value),
-    .groups = "drop"
-  )
-
-summary_nominal <- tibble::tibble(
-  metric = factor(summary_labels, levels = summary_labels),
-  value = c(1, 0.5, 0)
-)
-
-# Zoom each panel to the widest 10-90% quantile range of the replicates across
-# models, extended to keep the species points and nominal values in view.
-# oob_keep so the violins are still computed from all replicates (as with
-# coord_cartesian(), which can't be set per panel).
-summary_limits <- bind_rows(
-  rep_summary |>
-    group_by(metric, model) |>
-    summarise(lo = quantile(value, 0.1), hi = quantile(value, 0.9), .groups = "drop"),
-  rename(species_summary, lo = value) |> mutate(hi = lo),
-  rename(summary_nominal, lo = value) |> mutate(hi = lo)
-) |>
-  group_by(metric) |>
-  summarise(lo = min(lo), hi = max(hi)) |>
-  arrange(metric)
-summary_x_scales <- purrr::map2(
-  summary_limits$lo, summary_limits$hi,
-  \(lo, hi) scale_x_continuous(limits = c(lo, hi), oob = scales::oob_keep)
-)
-
-ggplot(species_summary, aes(value, model)) +
-  geom_violin(data = rep_summary, fill = "grey90", colour = NA, scale = "width") +
-  geom_vline(aes(xintercept = value), data = summary_nominal, linetype = 2, colour = "grey50") +
-  stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
-  geom_point(aes(colour = species), position = position_jitter(height = 0.15, seed = 1)) +
-  facet_wrap(~metric, nrow = 1, scales = "free_x") +
-  ggh4x::facetted_pos_scales(x = summary_x_scales) +
-  # Paired has 12 colours (Dark2 has only 8)
-  scale_colour_brewer(palette = "Paired", labels = tools::toTitleCase) +
-  labs(x = NULL, y = NULL, colour = NULL) +
-  theme(legend.position = "bottom", plot.margin = margin(5.5, 12, 5.5, 5.5)) +
-  guides(colour = guide_legend(nrow = 2))
-ggsave(here::here("figs/qcs-hs-biennial-self-test-summary.pdf"), width = 9, height = 4)
-
-compared |>
-  filter(rep <= 3) |>
-  ggplot(aes(cal_year, est, colour = model)) +
-  geom_line(aes(y = true_est), colour = "black") +
-  geom_line() +
-  facet_grid(species ~ rep, scales = "free_y", labeller = labeller(rep = label_both)) +
-  labs(x = "Year", y = "Biomass index", colour = "Model", caption = "Black: true index")
-ggsave(
-  here::here("figs/qcs-hs-biennial-self-test-indexes.pdf"),
-  width = 11, height = 1 + 2 * length(unique(compared$species))
 )

@@ -77,7 +77,7 @@ fit_model <- function(model, d, mesh) {
     "IID RF, factor(year)" = list(formula = observed ~ 0 + factor(year)),
     "IID RF, RW year" = list(
       formula = observed ~ 0, time_varying = ~1, time_varying_type = "rw",
-      priors = sdmTMBpriors(sigma_V = lognormal_prior(log(0.3), 0.5))
+      priors = sdmTMBpriors(sigma_V = sigma_V_prior(0.3, 0.5))
     )
   )
   fit_ok(do.call(sdmTMB, c(args, extra)))
@@ -115,9 +115,15 @@ run_task <- function(delta, sigma_O, seed) {
   )
   mesh <- make_square_mesh(d, max_edge = 0.05)
 
-  purrr::map(models, \(m) index_and_contrast(fit_model(m, d, mesh))) |>
+  # A model whose fit fails sanity checks or errors (in the fit or the index)
+  # is absent from the result; see fit_status below
+  indexes <- purrr::map(models, \(m) tryCatch(index_and_contrast(fit_model(m, d, mesh)), error = \(e) NULL)) |>
     setNames(models) |>
-    bind_rows(.id = "model") |>
+    purrr::compact()
+  if (length(indexes) == 0L) {
+    return(tibble::tibble(delta = delta, sigma_O = sigma_O, seed = seed, model = character()))
+  }
+  bind_rows(indexes, .id = "model") |>
     left_join(truth, by = "year") |>
     mutate(delta = delta, sigma_O = sigma_O, seed = seed, .before = 1L)
 }
@@ -128,7 +134,9 @@ if (FALSE) {
   tictoc::toc()
 }
 
-# Run (one cache file per task; delete files to refit) -------------------------
+# Run (one cache file per task; delete files to refit). A task that errors
+# (e.g., in the simulation) is reported and not cached, so a rerun retries it;
+# failed fits are cached as absent models --------------------------------------
 
 cache_dir <- here::here("data-generated/contrast-grid-cache")
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
@@ -143,7 +151,13 @@ if (nrow(todo) > 0L) {
   future::plan(future::multisession, workers = max(1L, min(18L, future::availableCores() - 2L)))
   furrr::future_pwalk(
     todo,
-    \(delta, sigma_O, seed, cache_file) saveRDS(run_task(delta, sigma_O, seed), cache_file),
+    \(delta, sigma_O, seed, cache_file) {
+      out <- tryCatch(run_task(delta, sigma_O, seed), error = \(e) {
+        message("Task delta = ", delta, ", sigma_O = ", sigma_O, ", seed = ", seed, " errored: ", conditionMessage(e))
+        NULL
+      })
+      if (!is.null(out)) saveRDS(out, cache_file)
+    },
     .options = furrr::furrr_options(seed = TRUE, scheduling = Inf)
   )
   future::plan(future::sequential)
@@ -152,12 +166,40 @@ if (nrow(todo) > 0L) {
 out <- purrr::map_dfr(tasks$cache_file[file.exists(tasks$cache_file)], readRDS)
 saveRDS(out, here::here("data-generated/contrast-grid.rds"))
 
+# Outcome of every requested fit: "ok", "fit failed" (sanity or error), or
+# "task error" (not cached). Models are compared only on seeds where every
+# model succeeded, so performance is conditional on success.
+fit_status <- tasks |>
+  tidyr::expand_grid(model = models) |>
+  left_join(mutate(distinct(out, delta, sigma_O, seed, model), fit_ok = TRUE), by = c("delta", "sigma_O", "seed", "model")) |>
+  mutate(status = case_when(
+    !file.exists(cache_file) ~ "task error",
+    !is.na(fit_ok) ~ "ok",
+    .default = "fit failed"
+  ))
+failure_rates <- fit_status |>
+  group_by(delta, sigma_O, model) |>
+  summarise(n_requested = n(), n_ok = sum(status == "ok"), failure_rate = 1 - n_ok / n_requested, .groups = "drop")
+if (any(failure_rates$failure_rate > 0)) {
+  cli::cli_warn("{sum(fit_status$status != 'ok')} of {nrow(fit_status)} requested fit(s) failed")
+  print(filter(failure_rates, failure_rate > 0), n = Inf)
+}
+common_seeds <- fit_status |>
+  group_by(delta, sigma_O, seed) |>
+  filter(all(status == "ok")) |>
+  ungroup() |>
+  distinct(delta, sigma_O, seed)
+out <- semi_join(out, common_seeds, by = c("delta", "sigma_O", "seed"))
+
 # Metrics ----------------------------------------------------------------------
 
 # Alternation follows year parity (north odd, south even), the default phase,
 # so beta (even minus odd years, log scale) is negative when north years read
 # high. Flip the sign so a positive bias is a seesaw towards the richer north,
-# then express it on the same percentage scale as A: 100 * (exp(bias) - 1).
+# then express it as a percentage: 100 * (exp(bias) - 1), how much too high
+# the index reads in north years relative to south years, compared with the
+# truth (the seesaw error, as in the self-tests). Unlike A, it is signed and
+# not inflated by noise.
 beta_of <- \(x, year) period2_metric(x, year = year)[["beta"]]
 
 metrics <- out |>
@@ -174,16 +216,16 @@ metrics <- out |>
   mutate(
     ratio = delta / sigma_O,
     bias = -(beta - beta_true),
-    excess_A = 100 * (exp(bias) - 1)
+    seesaw_error = 100 * (exp(bias) - 1)
   )
 
 cell_summary <- metrics |>
   group_by(model, delta, sigma_O, ratio) |>
   summarise(
     n = n(),
-    excess_med = median(excess_A),
-    excess_lo = quantile(excess_A, 0.25),
-    excess_hi = quantile(excess_A, 0.75),
+    seesaw_med = median(seesaw_error),
+    seesaw_lo = quantile(seesaw_error, 0.25),
+    seesaw_hi = quantile(seesaw_error, 0.75),
     rmse = mean(rmse),
     delta_hat = median(delta_hat),
     ratio_hat = median(ratio_hat),
@@ -193,13 +235,13 @@ print(cell_summary, n = Inf)
 
 # Plots ------------------------------------------------------------------------
 
-# Excess seesaw against the regional contrast. Lines for each sigma_O sit close
+# Seesaw error against the regional contrast. Lines for each sigma_O sit close
 # together, so Delta (not Delta / sigma_O) drives the bias; larger sigma_O lets
 # the spatial field absorb a little more of the contrast.
 dodge <- position_dodge(width = 0.15)
-ggplot(cell_summary, aes(delta, excess_med, colour = factor(sigma_O))) +
+ggplot(cell_summary, aes(delta, seesaw_med, colour = factor(sigma_O))) +
   geom_hline(yintercept = 0, linetype = 2, colour = "grey60") +
-  geom_linerange(aes(ymin = excess_lo, ymax = excess_hi), position = dodge) +
+  geom_linerange(aes(ymin = seesaw_lo, ymax = seesaw_hi), position = dodge) +
   geom_line(position = dodge) +
   geom_point(position = dodge) +
   scale_x_continuous(
@@ -211,7 +253,7 @@ ggplot(cell_summary, aes(delta, excess_med, colour = factor(sigma_O))) +
   facet_wrap(~model) +
   labs(
     x = expression("North-south difference in log density" ~ (Delta)),
-    y = "Excess seesaw A (%)",
+    y = "Seesaw error (%): north-year index\ntoo high relative to south years",
     colour = expression(Spatial ~ SD ~ (sigma[O]))
   )
 ggsave(here::here("figs/contrast-grid-bias-delta.pdf"), width = 7, height = 3.5)

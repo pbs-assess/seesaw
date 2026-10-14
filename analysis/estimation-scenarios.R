@@ -1,3 +1,5 @@
+source(here::here("analysis/priors.R"))
+
 build_model_specs <- function() {
   list(
     # Independent years ---------------------------------------------------
@@ -47,7 +49,7 @@ build_model_specs <- function() {
         time_varying = ~1,
         time_varying_type = "rw",
         spatiotemporal = "iid",
-        priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::lognormal_prior(log(0.3), 0.5))
+        priors = sdmTMB::sdmTMBpriors(sigma_V = sigma_V_prior(0.3, 0.5))
       )
     ),
     list(
@@ -59,7 +61,7 @@ build_model_specs <- function() {
         time_varying = ~1,
         time_varying_type = "rw",
         spatiotemporal = "ar1",
-        priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::lognormal_prior(log(0.3), 0.5), ar1_rho = normal(0, 1))
+        priors = sdmTMB::sdmTMBpriors(sigma_V = sigma_V_prior(0.3, 0.5), ar1_rho = normal(0, 1))
       )
     ),
     list(
@@ -71,7 +73,7 @@ build_model_specs <- function() {
         time_varying = ~1,
         time_varying_type = "rw",
         spatiotemporal = "rw",
-        priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::lognormal_prior(log(0.3), 0.5))
+        priors = sdmTMB::sdmTMBpriors(sigma_V = sigma_V_prior(0.3, 0.5))
       )
     ),
     list(
@@ -83,7 +85,7 @@ build_model_specs <- function() {
         time_varying = ~1,
         time_varying_type = "rw",
         spatiotemporal = "off",
-        priors = sdmTMB::sdmTMBpriors(sigma_V = sdmTMB::lognormal_prior(log(0.3), 0.5))
+        priors = sdmTMB::sdmTMBpriors(sigma_V = sigma_V_prior(0.3, 0.5))
       )
     ),
     # No year effects -----------------------------------------------------

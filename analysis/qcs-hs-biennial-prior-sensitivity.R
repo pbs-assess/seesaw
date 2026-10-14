@@ -1,10 +1,11 @@
-# Sensitivity of the IID RF, RW year model to the gamma prior on sigma_V
+# Sensitivity of the IID RF, RW year model to the lognormal prior on sigma_V
 # (the SD of the random walk intercept) for Pacific cod under pretend biennial
 # QCS / HS sampling.
 #
 # As in analysis/07-qcs-hs-biennial-model-comparison.R, the 'truth' is IID RF,
 # factor(year) fit to the full data (both regions every year). Each prior in a
-# grid of means x CVs is fit to the biennial subset, plus a fit with no prior.
+# grid of target SDs x sdlogs is fit to the biennial subset, plus a fit with no
+# prior; the target is the prior's mode (see analysis/priors.R).
 # Time is survey occasion, so sigma_V is the SD of the change in the intercept
 # per occasion (2 calendar years).
 
@@ -25,8 +26,8 @@ survey_names <- c("SYN QCS", "SYN HS")
 ci_level <- 0.5
 seesaw_window <- 8L
 
-prior_grid <- tidyr::crossing(mean = c(0.1, 0.3, 0.5), cv = c(0.1, 0.3, 0.5, 0.8)) |>
-  mutate(prior = paste0("mean = ", mean, ", CV = ", cv))
+prior_grid <- tidyr::crossing(target_sd = c(0.1, 0.3, 0.5), sdlog = c(0.1, 0.3, 0.5, 0.8)) |>
+  mutate(prior = paste0("target = ", target_sd, ", sdlog = ", sdlog))
 
 # Data -----------------------------------------------------------------------
 
@@ -111,12 +112,12 @@ summarise_fit <- function(fit) {
   )
 }
 
-fits_file <- here::here("data-generated/qcs-hs-biennial-prior-sensitivity.rds")
+fits_file <- here::here("data-generated/qcs-hs-biennial-prior-sensitivity-lognormal-target.rds")
 if (!file.exists(fits_file)) {
   jobs <- c(
     list(truth = NULL, "no prior" = sdmTMBpriors()),
     setNames(
-      purrr::map2(prior_grid$mean, prior_grid$cv, \(m, cv) sdmTMBpriors(sigma_V = gamma_cv(m, cv))),
+      purrr::map2(prior_grid$target_sd, prior_grid$sdlog, \(t, s) sdmTMBpriors(sigma_V = sigma_V_prior(t, s))),
       prior_grid$prior
     )
   )
@@ -187,7 +188,7 @@ seesaw <- function(est, primary_survey, year) {
 q <- qnorm(1 - (1 - ci_level) / 2)
 metrics <- indexes |>
   arrange(prior, year) |>
-  group_by(prior, mean, cv, sanity_ok) |>
+  group_by(prior, target_sd, sdlog, sanity_ok) |>
   summarise(
     rmse = sqrt(mean(log_error^2)),
     bias = mean(log_error),
@@ -215,21 +216,21 @@ metrics |>
 
 # Plots ----------------------------------------------------------------------
 
-prior_labels <- \(d) mutate(d, mean_lab = paste("Prior mean =", mean), cv_lab = paste("CV =", cv))
+prior_labels <- \(d) mutate(d, target_lab = paste("Prior target =", target_sd), sdlog_lab = paste("sdlog =", sdlog))
 
 indexes |>
   filter(prior != "no prior") |>
   prior_labels() |>
-  ggplot(aes(cal_year, colour = factor(mean))) +
+  ggplot(aes(cal_year, colour = factor(target_sd))) +
   geom_ribbon(aes(cal_year, ymin = true_lwr, ymax = true_upr), data = truth, fill = "grey85", inherit.aes = FALSE) +
   geom_line(aes(y = true_est), data = truth, colour = "black") +
   geom_line(aes(y = est)) +
   geom_point(aes(y = est, shape = primary_survey)) +
-  facet_wrap(~cv_lab, nrow = 1) +
+  facet_wrap(~sdlog_lab, nrow = 1) +
   scale_colour_viridis_d(end = 0.85) +
   scale_shape_manual(values = c(`SYN HS` = 19, `SYN QCS` = 21)) +
   labs(
-    x = "Year", y = "Biomass index", colour = "Prior mean", shape = "Region sampled"
+    x = "Year", y = "Biomass index", colour = "Prior target SD", shape = "Region sampled"
   )
 ggsave(here::here("figs/qcs-hs-biennial-prior-sensitivity-indexes.pdf"), width = 11, height = 3.5)
 
@@ -237,10 +238,7 @@ ggsave(here::here("figs/qcs-hs-biennial-prior-sensitivity-indexes.pdf"), width =
 x <- seq(0.001, 1.5, length.out = 300)
 densities <- prior_grid |>
   tidyr::crossing(x = x) |>
-  mutate(
-    shape = 1 / cv^2,
-    density = dgamma(x, shape = shape, rate = shape / mean)
-  ) |>
+  mutate(density = dlnorm(x, meanlog = log(target_sd) + sdlog^2, sdlog = sdlog)) |>
   prior_labels()
 
 ggplot(densities, aes(x, density)) +
@@ -249,7 +247,7 @@ ggplot(densities, aes(x, density)) +
     aes(xintercept = estimate, colour = component),
     data = prior_labels(filter(sigma_V, prior != "no prior"))
   ) +
-  facet_grid(mean_lab ~ cv_lab, scales = "free_y") +
+  facet_grid(target_lab ~ sdlog_lab, scales = "free_y") +
   coord_cartesian(xlim = c(0, 1.5)) +
   labs(x = "sigma_V (per occasion)", y = "Prior density", colour = "Estimate")
 ggsave(here::here("figs/qcs-hs-biennial-prior-sensitivity-sigma.pdf"), width = 7.5, height = 5)
@@ -258,7 +256,7 @@ metrics |>
   filter(prior != "no prior") |>
   tidyr::pivot_longer(c(rmse, bias, coverage, A, A_max), names_to = "metric") |>
   mutate(metric = factor(metric, levels = c("rmse", "bias", "coverage", "A", "A_max"))) |>
-  ggplot(aes(factor(cv), value, colour = factor(mean), group = factor(mean))) +
+  ggplot(aes(factor(sdlog), value, colour = factor(target_sd), group = factor(target_sd))) +
   geom_hline(
     aes(yintercept = value),
     data = metrics |>
@@ -270,5 +268,5 @@ metrics |>
   geom_line() +
   geom_point() +
   facet_wrap(~metric, scales = "free_y", nrow = 1) +
-  labs(x = "Prior CV", y = NULL, colour = "Prior mean", caption = "Dashed: no prior.")
+  labs(x = "Prior sdlog", y = NULL, colour = "Prior target SD", caption = "Dashed: no prior.")
 ggsave(here::here("figs/qcs-hs-biennial-prior-sensitivity-metrics.pdf"), width = 12, height = 3)
