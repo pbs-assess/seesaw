@@ -9,7 +9,7 @@
 # long, narrow, along-coast domain like the BC surveys) with the same
 # species as far as possible.
 #
-# 1. Fit the operating model (AR1 RF, factor(year)) to the full WCGBTS data.
+# 1. Fit the operating model (IID RF, factor(year)) to the full WCGBTS data.
 # 2. For each replicate, draw the spatial fields from their approximate
 #    posterior and entirely new spatiotemporal fields and observation error at
 #    the observed tows and, on the same field draws, the expected density on
@@ -63,8 +63,12 @@ mesh_cutoff <- 20
 # workers of RAM.
 n_workers <- max(1L, min(60L, future::availableCores() - 2L))
 
-# Operating model, also refit to the full simulated data for calibration
-om_model <- "AR1 RF, factor(year)"
+# Operating model, also refit to the full simulated data for calibration. IID
+# spatiotemporal fields: with AR1, rho went to ~1 for several species, so each
+# replicate's new epsilon_st was in effect a second, persistent spatial field
+# drawn from the prior, swamping the posterior omega_s. With IID, persistent
+# structure stays in omega_s and the new epsilon_st are year-to-year noise.
+om_model <- "IID RF, factor(year)"
 # FALSE: spatial fields are a new draw from their approximate posterior each
 # replicate (keeps the fitted gradient across the split, with uncertainty);
 # TRUE: spatial fields are entirely new draws from the GMRF prior
@@ -176,10 +180,38 @@ setup_species <- function(species) {
   mesh <- make_mesh(dat, c("X", "Y"), cutoff = mesh_cutoff)
   mesh_alt <- make_mesh(dat[is_sampled, ], c("X", "Y"), mesh = mesh$mesh)
 
-  fit_om <- fit_ok(fit_model(om_model, dat, mesh))
-  if (is.null(fit_om)) {
+  # As fit_ok(), but a failed operating model returns its diagnostics (cached
+  # in setups/) instead of NULL so the cause can be seen without refitting
+  fit_om <- tryCatch(fit_model(om_model, dat, mesh), error = \(e) e)
+  if (!inherits(fit_om, "sdmTMB")) {
+    cli::cli_warn("Operating model errored for {species}: {conditionMessage(fit_om)}")
+    return(list(species = species, om_failed = TRUE, error = conditionMessage(fit_om)))
+  }
+  checks <- tryCatch(
+    unlist(sdmTMB::sanity(fit_om, gradient_thresh = 0.01, silent = TRUE)),
+    error = \(e) c(sanity_error = FALSE)
+  )
+  # Kept for every species to check the fitted field SDs and ranges
+  tidy_ok <- \(...) tryCatch(sdmTMB::tidy(fit_om, ...), error = \(e) NULL)
+  om_ran_pars <- bind_rows(
+    mutate(tidy_ok("ran_pars", model = 1), model = "encounter"),
+    mutate(tidy_ok("ran_pars", model = 2), model = "positive")
+  )
+  if (!all(checks)) {
     cli::cli_warn("Operating model did not pass sanity checks for {species}")
-    return(NULL)
+    return(list(
+      species = species,
+      om_failed = TRUE,
+      sanity = checks,
+      pd_hessian = fit_om$pos_def_hessian,
+      convergence = fit_om$model$message,
+      gradients = tibble::tibble(
+        par = names(fit_om$model$par),
+        est = unname(fit_om$model$par),
+        gradient = as.numeric(fit_om$gradients)
+      ),
+      ran_pars = om_ran_pars
+    ))
   }
 
   # Tows and grid cells in one newdata so both share the same field draws.
@@ -226,7 +258,8 @@ setup_species <- function(species) {
     mesh_alt = mesh_alt,
     occasions = distinct(dat, year, cal_year, primary_region),
     catches = lapply(sim_reports, \(r) r$y_i[is_tow, 1L] * r$y_i[is_tow, 2L]),
-    true_indexes = true_indexes
+    true_indexes = true_indexes,
+    ran_pars = om_ran_pars
   )
 }
 
@@ -287,9 +320,12 @@ log_progress <- function(...) {
 }
 minutes_since <- \(t0) round(as.numeric(difftime(Sys.time(), t0, units = "mins")), 1)
 
-# Errors are logged and not cached, so a rerun retries that task. A NULL setup
-# (operating model failed sanity checks) or empty fit (failed sanity checks) is
-# cached so it isn't refit.
+# Errors are logged and not cached, so a rerun retries that task. A failed
+# setup (operating model errored or failed sanity checks; om_failed = TRUE with
+# its diagnostics) or empty fit (failed sanity checks) is cached so it isn't
+# refit. Inspect a failed setup with, e.g.:
+#   s <- readRDS(setup_file("dover sole")); s$sanity; s$ran_pars
+#   dplyr::arrange(s$gradients, -abs(gradient))
 run_setup <- function(species) {
   t0 <- Sys.time()
   log_progress("start setup: ", species)
@@ -297,9 +333,11 @@ run_setup <- function(species) {
     {
       setup <- setup_species(species)
       saveRDS(setup, setup_file(species))
-      log_progress(
-        "done setup: ", species, if (is.null(setup)) " (OM FAILED)", " [", minutes_since(t0), " min]"
-      )
+      failed <- if (isTRUE(setup$om_failed)) {
+        why <- if (!is.null(setup$error)) setup$error else paste(names(setup$sanity)[!setup$sanity], collapse = ", ")
+        paste0(" (OM FAILED: ", why, ")")
+      }
+      log_progress("done setup: ", species, failed, " [", minutes_since(t0), " min]")
     },
     error = \(e) log_progress("ERROR setup: ", species, ": ", conditionMessage(e))
   )
@@ -335,7 +373,8 @@ if (length(to_fit) > 0L) {
     setup_todo, run_setup,
     .options = furrr::furrr_options(seed = TRUE, scheduling = Inf)
   )
-  setups <- purrr::compact(lapply(setup_file(to_fit), read_if_exists))
+  setups <- purrr::compact(lapply(setup_file(to_fit), read_if_exists)) |>
+    purrr::discard(\(s) isTRUE(s$om_failed))
 
   # One species x replicate x model per future so the workers stay busy and a
   # slow fit doesn't hold up others. Replicates are the outer loop so complete
