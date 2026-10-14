@@ -4,7 +4,7 @@
 # the truth, but that index is itself an estimate that shares data with the
 # biennial fits. Here the truth is known exactly:
 #
-# 1. Fit the operating model (AR1 RF, factor(year)) to the full QCS + HS data.
+# 1. Fit the operating model (IID RF, factor(year)) to the full QCS + HS data.
 # 2. For each replicate, draw the spatial fields from their approximate
 #    posterior and entirely new spatiotemporal fields and observation error at
 #    the observed tows and, on the same field draws, the expected density on
@@ -40,9 +40,8 @@ species_to_fit <- c(
   "lingcod",
   "sablefish",
   "dover sole",
-  "arrowtooth flounder"
-  # shortspine thornyhead dropped: its OM encounter AR1 field sits at rho = 1,
-  # so each replicate's new epsilon is a near-static field
+  "arrowtooth flounder",
+  "shortspine thornyhead"
 )
 n_reps <- 20L
 ci_levels <- c(0.5, 0.95)
@@ -51,8 +50,12 @@ ci_levels <- c(0.5, 0.95)
 # windows (10, as in the annual-survey scripts, would give only 2).
 seesaw_window <- 8L
 
-# Operating model, also refit to the full simulated data for calibration
-om_model <- "AR1 RF, factor(year)"
+# Operating model, also refit to the full simulated data for calibration. IID
+# spatiotemporal fields: with AR1, rho can go to ~1, so each replicate's new
+# epsilon_st is in effect a second, persistent spatial field drawn from the
+# prior, swamping the posterior omega_s. With IID, persistent structure stays
+# in omega_s and the new epsilon_st are year-to-year noise.
+om_model <- "IID RF, factor(year)"
 # FALSE: spatial fields are a new draw from their approximate posterior each
 # replicate (keeps the fitted gradient across QCS / HS, with uncertainty);
 # TRUE: spatial fields are entirely new draws from the GMRF prior
