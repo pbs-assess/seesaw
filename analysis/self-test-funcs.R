@@ -577,7 +577,8 @@ self_test_metrics <- function(compared, results, window) {
 
   orientation <- results$true_indexes |>
     group_by(species, rep) |>
-    summarise(contrast_omega = mean(contrast_omega), .groups = "drop") |>
+    # the realized contrasts are kept for relating the error to them
+    summarise(across(c(contrast, contrast_omega, contrast_density), mean), .groups = "drop") |>
     mutate(orientation = if_else(contrast_omega < 0, -1, 1))
   metrics_rep <- metrics_rep |>
     left_join(orientation, by = c("species", "rep")) |>

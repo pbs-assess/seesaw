@@ -32,13 +32,15 @@ do_fit_afsc_pbs <- function(.sp) {
   prop_positive <- dat |>
     dplyr::summarise(prop_positive = mean(catch_weight > 0), .by = survey_group)
   if (!all(c("goa", "pbs") %in% prop_positive$survey_group) || any(prop_positive$prop_positive < 0.25)) {
-    return(dplyr::tibble())
+    return(list(index = dplyr::tibble(), covariates = NULL))
   }
 
   grid <- surveyjoin::dfo_synoptic_grid |>
     dplyr::bind_rows(dplyr::filter(surveyjoin::afsc_grid, survey == "Gulf of Alaska Bottom Trawl Survey")) |>
     sdmTMB::add_utm_columns(c("lon", "lat"), utm_crs = 3156) |>
     clamp_depth(dat) |>
+    # region labels as in `dat$survey_name`, for the fit summaries
+    dplyr::mutate(region = dplyr::if_else(grepl("Gulf of Alaska", survey), "Gulf of Alaska", survey)) |>
     dplyr::mutate(survey_group = "pbs") |> # index is for the PBS catchability level
     sdmTMB::replicate_df("year", sort(unique(dat$year)))
 
@@ -52,9 +54,10 @@ do_fit_afsc_pbs <- function(.sp) {
     family = sdmTMB::delta_gamma(type = "poisson-link"),
     offset = log(dat$effort),
     covariates = "factor(survey_group)",
-    nsplit = 5L # large GOA + PBS grid; predict in chunks to limit memory
+    nsplit = 5L, # large GOA + PBS grid; predict in chunks to limit memory
+    covariate_groups = c(grid = "region", dat = "survey_name")
   ) |>
-    dplyr::mutate(species = .sp)
+    with_species(.sp)
 }
 
 spp_to_fit_afsc_pbs <- c(
@@ -81,16 +84,19 @@ spp_to_fit_afsc_pbs <- c(
   "walleye pollock"
 )
 
-# Delete the .rds to force a refit
+# Delete the .rds files to force a refit (the covariates file has per-species
+# fit summaries; see 03-fit-syn-models.R)
 fits_file <- here::here("data-generated/transboundary-afsc-pbs-indexes.rds")
-if (!file.exists(fits_file)) {
+covariates_file <- here::here("data-generated/transboundary-afsc-pbs-covariates.rds")
+if (!file.exists(fits_file) || !file.exists(covariates_file)) {
   RhpcBLASctl::blas_set_num_threads(1L)
   RhpcBLASctl::omp_set_num_threads(1L)
 
   future::plan(future::multisession, workers = min(c(length(spp_to_fit_afsc_pbs), future::availableCores() / 2)))
-  out <- furrr::future_map_dfr(spp_to_fit_afsc_pbs, do_fit_afsc_pbs, .options = furrr::furrr_options(seed = TRUE))
+  fitted <- furrr::future_map(setNames(spp_to_fit_afsc_pbs, spp_to_fit_afsc_pbs), do_fit_afsc_pbs, .options = furrr::furrr_options(seed = TRUE))
   future::plan(future::sequential)
-  saveRDS(out, file = fits_file)
+  saveRDS(dplyr::bind_rows(lapply(fitted, `[[`, "index")), file = fits_file)
+  saveRDS(purrr::compact(lapply(fitted, `[[`, "covariates")), file = covariates_file)
 }
 
 out <- readRDS(fits_file) |>

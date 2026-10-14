@@ -67,9 +67,10 @@ do_fit_hbll <- function(.sp) {
     mesh = mesh,
     response = "catch_count",
     family = list(nbinom1(), nbinom2()),
-    offset = dat$offset
+    offset = dat$offset,
+    covariate_groups = c(grid = "survey_abbrev", dat = "survey_abbrev")
   ) |>
-    mutate(species = .sp)
+    with_species(.sp)
 }
 
 spp_to_fit_hbll <- c(
@@ -94,16 +95,19 @@ spp_to_fit_hbll <- c(
 )
 stopifnot(all(spp_to_fit_hbll %in% sets$species_common_name))
 
-# Delete the .rds to force a refit
+# Delete the .rds files to force a refit (the covariates file has per-species
+# fit summaries; see 03-fit-syn-models.R)
 fits_file <- here::here("data-generated/hbll-indexes.rds")
-if (!file.exists(fits_file)) {
+covariates_file <- here::here("data-generated/hbll-covariates.rds")
+if (!file.exists(fits_file) || !file.exists(covariates_file)) {
   RhpcBLASctl::blas_set_num_threads(1L)
   RhpcBLASctl::omp_set_num_threads(1L)
 
   future::plan(future::multisession, workers = min(c(length(spp_to_fit_hbll), future::availableCores())))
-  out <- furrr::future_map_dfr(spp_to_fit_hbll, do_fit_hbll, .options = furrr::furrr_options(seed = TRUE))
+  fitted <- furrr::future_map(setNames(spp_to_fit_hbll, spp_to_fit_hbll), do_fit_hbll, .options = furrr::furrr_options(seed = TRUE))
   future::plan(future::sequential)
-  saveRDS(out, file = fits_file)
+  saveRDS(dplyr::bind_rows(lapply(fitted, `[[`, "index")), file = fits_file)
+  saveRDS(purrr::compact(lapply(fitted, `[[`, "covariates")), file = covariates_file)
 }
 
 out <- readRDS(fits_file) |>

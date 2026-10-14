@@ -27,6 +27,7 @@
 #   tail -f data-generated/nwfsc-split-self-test/progress.log
 
 source(here::here("analysis/self-test-funcs.R"))
+source(here::here("analysis/fit-covariates.R"))
 theme_set(ggsidekick::theme_sleek())
 
 surveyjoin::cache_data()
@@ -164,6 +165,13 @@ results <- run_self_test(
 # Metrics and plots ------------------------------------------------------------
 
 m <- self_test_metrics(compare_to_truth(results), results, seesaw_window)
+# Per-species fit summaries (random-effect parameters, regional omega / density,
+# gradient) from the cached operating models, for relating the seesaw error to
+# fit properties (analysis/18-seesaw-correlates.R)
+m$fit_covariates <- cached_fit_covariates(
+  here::here("data-generated/nwfsc-split-self-test"), species_to_fit,
+  grid_group = "region", dat_group = "region"
+)
 saveRDS(m, here::here("data-generated/nwfsc-split-self-test-metrics.rds"))
 
 m$metrics |>

@@ -57,9 +57,10 @@ do_fit_syn <- function(.sp) {
     response = "catch_weight",
     family = sdmTMB::delta_gamma(type = "poisson-link"),
     offset = log(dat$effort),
-    all_data = list(data = dat_all, mesh = mesh_all, offset = log(dat_all$effort))
+    all_data = list(data = dat_all, mesh = mesh_all, offset = log(dat_all$effort)),
+    covariate_groups = c(grid = "survey", dat = "survey_name")
   ) |>
-    dplyr::mutate(species = .sp)
+    with_species(.sp)
 }
 
 spp_to_fit_syn <- c(
@@ -86,16 +87,20 @@ spp_to_fit_syn <- c(
   "walleye pollock"
 )
 
-# Delete the .rds to force a refit
+# Delete the .rds files to force a refit. The covariates file has per-species
+# fit summaries (random-effect parameters, regional omega / density, gradient)
+# for relating the seesaw to fit properties (analysis/18-seesaw-correlates.R)
 fits_file <- here::here("data-generated/bc-indexes4.rds")
-if (!file.exists(fits_file)) {
+covariates_file <- here::here("data-generated/bc-indexes4-covariates.rds")
+if (!file.exists(fits_file) || !file.exists(covariates_file)) {
   RhpcBLASctl::blas_set_num_threads(1L)
   RhpcBLASctl::omp_set_num_threads(1L)
 
   future::plan(future::multisession, workers = min(c(length(spp_to_fit_syn), future::availableCores() / 2)))
-  out <- furrr::future_map_dfr(spp_to_fit_syn, do_fit_syn, .options = furrr::furrr_options(seed = TRUE))
+  fitted <- furrr::future_map(setNames(spp_to_fit_syn, spp_to_fit_syn), do_fit_syn, .options = furrr::furrr_options(seed = TRUE))
   future::plan(future::sequential)
-  saveRDS(out, file = fits_file)
+  saveRDS(dplyr::bind_rows(lapply(fitted, `[[`, "index")), file = fits_file)
+  saveRDS(purrr::compact(lapply(fitted, `[[`, "covariates")), file = covariates_file)
 }
 
 out <- readRDS(fits_file) |>
