@@ -21,4 +21,5 @@ text/seesaw.blg
 .Renviron
 .Rprofile
 renv.lock
+*.rds
 data-generated/norway-species/*/

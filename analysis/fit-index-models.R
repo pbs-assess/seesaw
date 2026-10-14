@@ -3,6 +3,7 @@
 # `fit_index_models()`.
 
 source(here::here("analysis/priors.R"))
+source(here::here("analysis/fit-covariates.R"))
 
 # Returns the fit if it ran and passed sanity checks, otherwise NULL
 fit_ok <- function(expr) {
@@ -33,6 +34,12 @@ clamp_depth <- function(grid, dat, depth_col = "depth_m") {
   grid
 }
 
+# Add the species to the index of a fit_index_models(covariate_groups = ) result
+with_species <- function(res, species) {
+  res$index <- dplyr::mutate(res$index, species = species)
+  res
+}
+
 #' @param dat Data with columns `year`, `X`, `Y`, `depth_m`, and the response.
 #' @param grid Prediction grid with columns `year`, `X`, `Y`, `depth_m`, `area`.
 #' @param mesh Mesh built from `dat`.
@@ -46,10 +53,17 @@ clamp_depth <- function(grid, dat, depth_col = "depth_m") {
 #' @param all_data Optional list(data, mesh, offset) for the "all data" models,
 #'   which also need a `survey_name` column.
 #' @param control [sdmTMB::sdmTMBcontrol()] list used for all models.
+#' @param anisotropy Estimate anisotropic spatial covariance (all models).
 #' @param nsplit Number of year chunks to split index prediction into
 #'   ([sdmTMB::get_index_split()]); increase for large grids.
+#' @param covariate_groups Optional `c(grid = , dat = )` of column names defining
+#'   regions (e.g. survey) in `grid` and `dat`. If given, the return value is
+#'   `list(index, covariates)`, where `covariates` is [fit_covariates()] of the
+#'   "IID RF, factor(year)" fit (NULL if that fit failed), instead of the index
+#'   tibble alone.
 fit_index_models <- function(dat, grid, mesh, response, family, offset, covariates = NULL, all_data = NULL,
-                             control = sdmTMB::sdmTMBcontrol(), nsplit = 2L) {
+                             control = sdmTMB::sdmTMBcontrol(), nsplit = 2L, covariate_groups = NULL,
+                             anisotropy = TRUE) {
   all_yrs <- seq(min(dat$year), max(dat$year))
   base_formula <- stats::as.formula(paste(response, "~", paste(c("0 + factor(year)", covariates), collapse = " + ")))
   # RHS for models where the year effect is not a fixed factor
@@ -74,7 +88,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, covariat
       spatial = "on",
       spatiotemporal = "iid",
       share_range = TRUE,
-      anisotropy = TRUE,
+      anisotropy = .(anisotropy),
       control = .(control),
       silent = FALSE
     ))), error = \(e) NULL)
@@ -83,7 +97,7 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, covariat
   if (inherits(family, "family")) family <- list(family)
   candidates <- purrr::compact(lapply(family, fit_base))
   if (length(candidates) == 0L) {
-    return(dplyr::tibble())
+    return(if (is.null(covariate_groups)) dplyr::tibble() else list(index = dplyr::tibble(), covariates = NULL))
   }
   converged <- purrr::compact(lapply(candidates, fit_ok))
   pool <- if (length(converged) > 0L) converged else candidates
@@ -102,7 +116,9 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, covariat
 
     fits[["IID RF, factor(year), factor(survey), all data"]] <- fit_ok(update(
       template,
-      formula. = . ~ factor(year) + factor(survey_name),
+      formula. = stats::as.formula(paste(
+        ". ~", paste(c("factor(year)", covariates, "factor(survey_name)"), collapse = " + ")
+      )),
       data = all_data$data,
       mesh = all_data$mesh,
       offset = all_data$offset
@@ -168,8 +184,21 @@ fit_index_models <- function(dat, grid, mesh, response, family, offset, covariat
     formula. = depth_formula
   ))
 
-  purrr::compact(fits) |>
+  index <- purrr::compact(fits) |>
     purrr::map(\(f) get_index_ok(f, grid, nsplit = nsplit)) |>
     dplyr::bind_rows(.id = "model") |>
     dplyr::mutate(family = paste(template$family$family, collapse = "/"))
+  if (is.null(covariate_groups)) {
+    return(index)
+  }
+  covariates <- if (!is.null(fits[["IID RF, factor(year)"]])) {
+    tryCatch(
+      fit_covariates(
+        fits[["IID RF, factor(year)"]], grid, dat, response,
+        grid_group = covariate_groups[["grid"]], dat_group = covariate_groups[["dat"]]
+      ),
+      error = \(e) NULL
+    )
+  }
+  list(index = index, covariates = covariates)
 }
