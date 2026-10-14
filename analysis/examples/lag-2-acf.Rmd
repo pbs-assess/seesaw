@@ -1,0 +1,117 @@
+---
+title: "seesaw lag-2 acf"
+output: html_document
+---
+
+True positive trend with seesaw
+
+```{r}
+library(ggplot2)
+
+a = 0.5
+b = 2
+x <- 1:20
+truth = a*x + b
+y = truth
+odds <- x %% 2 != 0
+y[odds] = y[odds] + 1
+y[!odds] = y[!odds] - 1
+
+df <- data.frame(x=x, y=y, col=odds, true=truth)
+ggplot(df) +
+  geom_line(aes(x=x, y=y)) +
+  geom_line(aes(x=x, y=true), linetype=2) +
+  geom_point(aes(x=x, y=y, color=col), size=3) +
+  theme_bw()
+```
+
+Lag plots
+
+```{r}
+xy.ts <- ts(data=y, frequency=1)
+lag.plot(xy.ts, lags=6, do.lines=F)
+```
+
+ACF plot
+
+```{r}
+acf(xy.ts, lag.max=6)
+```
+
+Moving window size 10, lag-1 and lag-2
+
+```{r}
+window_size <- 10
+roll_acf_lag1 <- zoo::rollapply(y, width = window_size, function(v) {
+  acf(v, lag.max = 1, plot = FALSE)$acf[1 + 1]
+}, by.column = TRUE, align = "right")
+roll_acf_lag2 <- zoo::rollapply(y, width = window_size, function(v) {
+  acf(v, lag.max = 2, plot = FALSE)$acf[2 + 1]
+}, by.column = TRUE, align = "right")
+
+roll_acf_lag1
+roll_acf_lag2
+```
+
+Is a moving window of odd size better? Gives the same autocorrelation for all windows
+
+```{r}
+window_size <- 9
+roll_acf_lag1 <- zoo::rollapply(y, width = window_size, function(v) {
+  acf(v, lag.max = 1, plot = FALSE)$acf[1 + 1]
+}, by.column = TRUE, align = "right")
+roll_acf_lag2 <- zoo::rollapply(y, width = window_size, function(v) {
+  acf(v, lag.max = 2, plot = FALSE)$acf[2 + 1]
+}, by.column = TRUE, align = "right")
+
+roll_acf_lag1
+roll_acf_lag2
+```
+
+## Why would lag-1 autocorrelation be negative? What if the true trend is negative
+
+```{r}
+a = -0.5
+b = 2
+x <- 1:20
+truth = a*x + b
+y = truth
+odds <- x %% 2 != 0
+y[odds] = y[odds] + 1
+y[!odds] = y[!odds] - 1
+
+df <- data.frame(x=x, y=y, col=odds, true=truth)
+ggplot(df) +
+  geom_line(aes(x=x, y=y)) +
+  geom_line(aes(x=x, y=true), linetype=2) +
+  geom_point(aes(x=x, y=y, color=col), size=3) +
+  theme_bw()
+```
+
+Lag plots
+
+```{r}
+xy.ts <- ts(data=y, frequency=1)
+lag.plot(xy.ts, lags=6, do.lines=F)
+```
+
+ACF plot
+
+```{r}
+acf(xy.ts, lag.max=6)
+```
+
+Moving window size 9, lag-1 and lag-2
+
+```{r}
+window_size <- 9
+roll_acf_lag1 <- zoo::rollapply(y, width = window_size, function(v) {
+  acf(v, lag.max = 1, plot = FALSE)$acf[1 + 1]
+}, by.column = TRUE, align = "right")
+roll_acf_lag2 <- zoo::rollapply(y, width = window_size, function(v) {
+  acf(v, lag.max = 2, plot = FALSE)$acf[2 + 1]
+}, by.column = TRUE, align = "right")
+
+roll_acf_lag1
+roll_acf_lag2
+```

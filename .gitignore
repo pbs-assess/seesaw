@@ -2,7 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
-*.RDS
 text/notes.md
 text/seesaw.fls
 text/seesaw.out
@@ -18,3 +17,8 @@ text/seesaw.fdb_latexmk
 text/seesaw.bbl
 text/seesaw.blg
 .positai
+*.pptx
+.Renviron
+.Rprofile
+renv.lock
+data-generated/norway-species/*/
