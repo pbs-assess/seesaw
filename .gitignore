@@ -19,3 +19,6 @@ text/seesaw.bbl
 text/seesaw.blg
 .positai
 *.pptx
+.Renviron
+.Rprofile
+renv.lock
