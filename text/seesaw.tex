@@ -158,6 +158,7 @@ Target journals: CJFAS, ICES JMS, Fisheries Research, Ecological Applications
 % \section*{25 word summary}
 
 % Biennial survey designs can induce seesaw effects in expanded-area abundance indices when models confound spatial and temporal variation. Autoregressive temporal or spatiotemporal structures mitigate this.
+%
 
 \section*{Abstract}
 
@@ -583,3 +584,54 @@ AR(1) RF                                      & Starting value     & AR(1) \\
 \end{figure}
 
 \end{document}
+
+% PICES?
+Analysts increasingly seek to derive indices of abundance that span multiple survey domains to evaluate whole-stock status or climate-driven range shifts across international borders.
+In these situations, survey data are not always sampled across the full expanded domain each year either due to rotating sampling designs or biennial sampling by neighbouring jurisdictions. 
+Geostatistical index standardization offers a natural solution by predicting density in unsampled locations and years.
+However, applying commonly used index standardization models with independent year effects to rotating or biennial survey data can produce spurious interannual oscillations, which we term ``seesaw'' effects.
+Here, we diagnose the mechanisms underlying seesaw effects, evaluate conditions that modify their strength, and determine which spatiotemporal model configurations alleviate their effects.
+We find the issue arises when models mistake spatial variation in density for temporal variation.
+Strong density gradients in space, high spatiotemporal variance, short spatial correlation range, and spatial gaps between survey coverage accentuate the issue.
+We demonstrate with simulated data and with survey data from the NE Pacific and Norway that penalizing temporal or spatiotemporal variability via autoregressive correlation structures can reduce or eliminate seesaw effects.
+The challenge remains choosing an appropriate level of penalization because excess penalization can attenuate interannual variability.
+Our approach enables analysts to make better use of survey data collected across borders where the full domain is not sampled annually and thereby derive whole-stock indices of abundance and metrics of distribution change.
+
+XX lessons for combining survey data across borders
+
+Analysts increasingly seek to derive indices of abundance that span multiple survey domains to evaluate whole-stock status or climate-driven range shifts across international borders.
+
+
+In this talk, I will review the theory underlying expanded area data integration and highlight XX lessons for analysts considering such exercises.
+
+***
+Analysts are increasingly turning to model-based approaches to join datasets from neighbouring surveys across international borders.
+This potentially allows for the evaluation of whole-stock indices of abundance and climate-drive range shifts across international borders.
+Spatiotemporal models offer a natural solution because of their potential to account for differences in survey gear and effort as well as irregular sampling that does not adhere to a single design-based implementation.
+In this talk, I will cover the theory behind data integration---including regression discontinuity design, same- versus expanded-domain integration, accounting for catchability vs. length selectivity, and combining data of different data types.
+I will develop five lessons for expanded-domain survey data integration across borders:
+(1) Getting the data together can be harder than you think but several international database initiatives can help.
+(2) Joining survey data with models requires spatial and temporal proximity. How close is close enough depends on spatial correlation and habitat covariates. Overlap in surveys and deliberate calibration is ideal but not routinely available. 
+(4) By default, estimate different survey catchabilities; consider if an assumption of similar length selectivity is reasonable.
+(3) Be sure to account for differences in survey effort.
+(5) If sampling is irregular by region, watch for artifacts in predictions due to model space-time confusion.
+Integrating transboundary survey data holds tremendous promise to monitor whole-stock abundance and distribution shifts with climate change.
+By building careful statistical models we have the opportunity to make reliable inference from these data, but such models come with considerable challenges and we still have many limitations to discover and best practices to develop.
+***
+
+Analysts are increasingly turning to model-based approaches to join datasets from neighbouring surveys across international borders.
+When applied carefully, these methods can improve precision and accuracy in index estimation and distribution modelling.
+In this talk, I will cover the theory behind data integration---including same- versus expanded-domain integration, accounting for catchability vs. 
+length selectivity, spatially varying catchability, and combining different data types---along with the practical implications of the various approaches. 
+I will highlight an important issue related to survey integrat
+I will close by discussing what we should consider before integrating survey data, along with open questions about the limitations of these approaches.
+
+***
+
+Title: Integrating scientific survey data across borders
+
+Integrating transboundary Survey Data with Spatiotemporal Models: Lessons from the Northeast Pacific
+
+Analysts are increasingly turning to model-based approaches to integrate datasets from neighbouring jurisdictions and across international borders. These approaches can support whole-stock indices of abundance and improve inference about climate-driven range shifts. Spatiotemporal models are a natural framework for this task because they can account for differences in survey gear, sampling effort, and irregular sampling patterns that do not conform to a single design-based implementation. In this talk, I will introduce the theory behind expanded-domain data integration and develop four practical lessons for integrating survey data across borders drawing on examples from the North East Pacific. (1) Assembling transboundary survey data can be challenging, but recent international database initiatives are reducing this burden. (2) Model-based integration requires adequate spatial and temporal proximity in sampling; how close is close enough depends spatial correlation, habitat covariates, observation error, and gear similarity. (3) Analysts should generally allow catchability to vary by survey, consider spatially varying catchability, evaluate the assumption of similar length selectivity, and account for differences in survey effort. (4) If sampling is irregular by region, analysts should watch for prediction artifacts due to space-time confounding. Integrating transboundary survey data offers an important opportunity for monitoring whole-stock abundance and distribution shifts under climate change. Spatiotemporal models can support reliable inference from these data, but they also introduce challenges beyond those encountered in traditional single-survey models. I encourage future work exploring the limitations of these modelling approaches and the development of best practices for their implementation.
+
+***

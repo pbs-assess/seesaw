@@ -1,41 +1,9 @@
-# add full coverage sampling
-# try with random walk field as truth - does is do OK there??
-# try random walk time series - obs error - state space- fit and simulate over and over
-# does it flatten??
-# free up range
-# fix SD on random walk mean?
-# fitting a square dataset with a round model - title?
-# sept 19 - share range = FALSE!!
-
-# question: same thing happen with missing chunks from one index!?
-
-# To look at:
-# - gap matters! how much; related to range I assume
-# - **why does RW 'fix' things!?**
-# - getting the depth covariate right seems to fix seesaw; *but* bigger CIs on
-#   poorly sampled region
-# - is coverage of RW still OK!?
-# - happens with spatial-only model I think (from Quang)
-# - dig in... need to articulate simply what's going wrong!
-# - how do I know this is happening in reality (besides the seesaw)?
-# - does including a region/north/south covariate fix it: No! build in to
-#   routine code?
-
-# What is an index of seesawness?
-#
-# Things to show:
-# - spatial random field messing up
-# - RW deviations adapting to fit?
-# - fix depth covariates correctly - works?
-
-# quadratic, linear, or breakpoint covariate effect?
-
 library(sdmTMB)
 library(ggplot2)
 library(dplyr)
 source("analysis/funcs.R")
-# source("analysis/funcs-delta-gamma-poisson.R")
 dir.create("figs", showWarnings = FALSE)
+
 # Simulation testing survey stitching with various models -----------------
 
 source(here::here("analysis/simulation-scenarios.R"))
@@ -51,21 +19,16 @@ sc <- purrr::map(sc, ~ {
 })
 
 if (FALSE) {
+  # testing first:
   tictoc::tic()
   out20 <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = FALSE))
   tictoc::toc()
-
-  # testing first:
   out <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = T, save_plots = T))
-
   out <- do.call(sim_fit_and_index, c(sc[[12]], .seed = 1))
-
   actual <- select(out20, year, total, seed, sampled_region) |>
     distinct()
   actual
-
   out1 <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = FALSE))
-
   ggplot(out1, aes(year, est, ymin = lwr, ymax = upr)) +
     ggsidekick::theme_sleek() +
     geom_pointrange(aes(colour = sampled_region)) +
@@ -74,7 +37,7 @@ if (FALSE) {
       data = actual, mapping = aes(year, total),
       inherit.aes = FALSE, lty = 2
     ) +
-    facet_wrap( ~ type,
+    facet_wrap( ~ model,
       scales = "free_y"
     )
 }
@@ -92,12 +55,18 @@ sanitize_scenario_name <- function(x) {
   ifelse(nchar(x) == 0L, "scenario", x)
 }
 
-output_file <- "data-generated/sawtooth-sim-june26.rds"
-cache_dir <- "data-generated/sawtooth-sim-june26-cache"
+# Set to TRUE to fit only the model that produces the seesaw (IID fields +
+# factor(year)), e.g., to diagnose which scenarios drive it:
+seesaw_only <- TRUE
+models_to_fit <- if (seesaw_only) "IID RF, factor(year)" else NULL
+
+run_name <- if (seesaw_only) "sawtooth-sim-oct09-seesaw-only" else "sawtooth-sim-oct09"
+output_file <- file.path("data-generated", paste0(run_name, ".rds"))
+cache_dir <- file.path("data-generated", paste0(run_name, "-cache"))
 dir.create("data-generated", showWarnings = FALSE)
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 
-seeds <- seq_len(15)
+seeds <- seq_len(50L)
 scenario_slugs <- make.unique(vapply(names(sc), sanitize_scenario_name, character(1)), sep = "-dup-")
 tasks <- tidyr::crossing(
   seed = seeds,
@@ -124,7 +93,7 @@ if (nrow(todo) > 0L) {
   furrr::future_pwalk(
     todo,
     function(seed, scen_i, scenario_slug, scenario_label, cache_file) {
-      out <- do.call(sim_fit_and_index, c(sc[[scen_i]], .seed = seed))
+      out <- do.call(sim_fit_and_index, c(sc[[scen_i]], list(.seed = seed, models = models_to_fit)))
       out$label <- scenario_label
       saveRDS(out, cache_file)
     },
@@ -132,10 +101,6 @@ if (nrow(todo) > 0L) {
   )
   tictoc::toc()
   future::plan(future::sequential)
-}
-
-if (any(!file.exists(tasks$cache_file))) {
-  stop("Some cache files were not created.")
 }
 
 out_df <- purrr::map_dfr(tasks$cache_file, readRDS)
