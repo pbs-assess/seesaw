@@ -341,13 +341,23 @@ setup_worker <- function(species, dat, file, setup_species, log_file) {
   })
 }
 
-sim_worker <- function(setup, rep, file, simulate_rep, log_file) {
+# The setup (with its large operating-model fit) is read from its cached file
+# by the worker, not sent from the main session: serializing a copy per task
+# made the main session the bottleneck and the simulations run one at a time.
+# Each worker keeps the setups it has read.
+sim_setup_cache <- new.env()
+
+sim_worker <- function(species, setup_file, rep, file, simulate_rep, log_file) {
   single_thread()
-  run_logged(log_file, paste0("sim: ", setup$species, " rep ", rep), {
-    # A fit read from disk needs its TMB object rebuilt
-    setup$fit_om <- sdmTMB:::reload_model(setup$fit_om)
-    sampler <- sdmTMB:::.posterior_re_sampler(setup$fit_om)
-    saveRDS(simulate_rep(setup, sampler, rep), file)
+  run_logged(log_file, paste0("sim: ", species, " rep ", rep), {
+    if (is.null(sim_setup_cache[[species]])) {
+      setup <- readRDS(setup_file)
+      # A fit read from disk needs its TMB object rebuilt
+      setup$fit_om <- sdmTMB:::reload_model(setup$fit_om)
+      sim_setup_cache[[species]] <- list(setup = setup, sampler = sdmTMB:::.posterior_re_sampler(setup$fit_om))
+    }
+    cached <- sim_setup_cache[[species]]
+    saveRDS(simulate_rep(cached$setup, cached$sampler, rep), file)
     NULL
   })
 }
@@ -425,7 +435,7 @@ run_self_test <- function(dir, species, n_reps, prepare_data, setup_species, sim
   if (nrow(todo) > 0L) {
     log_progress(log_file, nrow(todo), " simulations to run")
     furrr::future_pwalk(
-      list(setup = setups[todo$species], rep = todo$rep, file = todo$file),
+      list(species = todo$species, setup_file = setup_file(todo$species), rep = todo$rep, file = todo$file),
       sim_worker,
       simulate_rep = simulate_rep, log_file = log_file,
       .options = opts
