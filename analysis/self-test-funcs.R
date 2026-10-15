@@ -91,16 +91,36 @@ fit_operating_model <- function(model, d, mesh, formula = NULL) {
   )
 }
 
-# Fit one model to one replicate's simulated catches: to all tows ("full") or
-# to the sampled half of each occasion ("alternating"). Returns the index, or
+# Tows kept by the "sparse" design: in each occasion, a random sample of the
+# whole domain with as many tows as the alternating design has that occasion
+# (same average effort, spread over both regions). A different draw for each
+# replicate, reproducible from `rep`.
+sparse_keep <- function(setup, rep) {
+  set.seed(seed_extra + rep)
+  keep <- logical(nrow(setup$dat))
+  for (y in unique(setup$dat$year)) {
+    in_year <- which(setup$dat$year == y)
+    n_alt <- sum(setup$is_sampled[in_year])
+    keep[in_year[sample.int(length(in_year), n_alt)]] <- TRUE
+  }
+  keep
+}
+
+# Fit one model to one replicate's simulated catches: to all tows ("full"), to
+# the sampled half of each occasion ("alternating"), or to a random subsample
+# of the whole domain with the same effort ("sparse"). Returns the index, or
 # an empty tibble if the fit fails sanity checks.
-fit_index <- function(setup, catch, design, model, index_nsplit = 2L) {
+fit_index <- function(setup, catch, design, model, index_nsplit = 2L, rep = NA_integer_) {
   d <- setup$dat
   d$catch_weight <- catch
   mesh <- setup$mesh
   if (design == "alternating") {
     d <- d[setup$is_sampled, ]
     mesh <- setup$mesh_alt
+  } else if (design == "sparse") {
+    d <- d[sparse_keep(setup, rep), ]
+    # same knots as the other designs
+    mesh <- make_mesh(d, c("X", "Y"), mesh = setup$mesh$mesh)
   }
   fit <- fit_ok(fit_model(model, d, mesh))
   index <- if (!is.null(fit)) get_index_ok(fit, setup$grid, nsplit = index_nsplit)
@@ -277,7 +297,13 @@ simulate_one_arm <- function(simulate_re = "spatiotemporal") {
 # Pipeline -------------------------------------------------------------------
 
 slug <- \(x) gsub("^-|-$", "", gsub("[^a-z0-9]+", "-", tolower(x)))
-model_label <- \(model, design) if_else(design == "full", paste0(model, " (full data)"), model)
+model_label <- \(model, design) {
+  case_when(
+    design == "full" ~ paste0(model, " (full data)"),
+    design == "sparse" ~ paste0(model, " (sparse annual)"),
+    .default = model
+  )
+}
 minutes_since <-\(t0) round(as.numeric(difftime(Sys.time(), t0, units = "mins")), 1)
 single_thread <- function() {
   RhpcBLASctl::blas_set_num_threads(1L)
@@ -329,7 +355,7 @@ sim_worker <- function(setup, rep, file, simulate_rep, log_file) {
 fit_worker <- function(setup, catch, rep, arm, design, model, file, index_nsplit, log_file) {
   single_thread()
   run_logged(log_file, paste0("fit: ", setup$species, " rep ", rep, " ", arm, " ", model, " (", design, ")"), {
-    index <- fit_index(setup, catch, design, model, index_nsplit)
+    index <- fit_index(setup, catch, design, model, index_nsplit, rep)
     saveRDS(index, file)
     if (nrow(index) == 0L) " FAILED SANITY"
   })
