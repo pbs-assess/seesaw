@@ -17,8 +17,9 @@
 #      (both regions) in every occasion, a different draw for each replicate,
 #      fit with IID RF + factor(year) and with IID RF + RW year
 #    Also the operating model refit to all tows, as the baseline.
-# 4. Score RMSE and 50% (and 95%) CI coverage of the bias-corrected index
-#    against the truth of each replicate.
+# 4. Score RMSE, 50% (and 95%) CI coverage of the bias-corrected index, seesaw
+#    A (and max A), and the signed seesaw error against the truth of each
+#    replicate (self_test_metrics(), as in 08).
 #
 # The pipeline is in analysis/self-test-funcs.R and everything is cached per
 # replicate, so n_reps can be raised later and only the new replicates are run.
@@ -43,6 +44,8 @@ species_to_fit <- c(
   "shortspine thornyhead"
 )
 n_reps <- 20L
+# Moving window (in survey occasions) for max A; as in 08
+seesaw_window <- 8L
 n_workers <- max(1L, min(60L, future::availableCores() - 2L))
 
 # Operating model; IID fields for the reasons given in analysis/08
@@ -87,34 +90,29 @@ results <- run_self_test(
 
 # Metrics --------------------------------------------------------------------
 
-compared <- compare_to_truth(results) |>
-  mutate(
-    design = factor(
-      if_else(design == "alternating", paste0(model, " (alternating)"), model),
-      levels = design_levels
-    )
-  )
-
-metrics_rep <- compared |>
-  group_by(species, rep, design) |>
-  summarise(
-    rmse = sqrt(mean(log_error^2)),
-    bias = mean(log_error),
-    coverage_50 = mean(covered_50),
-    coverage_95 = mean(covered_95),
-    .groups = "drop"
-  )
+# self_test_metrics() groups by the model label; the design label also tells
+# the alternating fit from the others
+label_design <- \(model) {
+  factor(if_else(model == alternating_model, alternating_level, model), levels = design_levels)
+}
+m <- self_test_metrics(compare_to_truth(results), results, seesaw_window)
+compared <- mutate(m$compared, design = label_design(model))
+metrics_rep <- mutate(m$metrics_rep, design = label_design(model))
 
 metrics <- metrics_rep |>
   group_by(species, design) |>
   summarise(
     n_reps = n(),
     across(c(rmse, bias, coverage_50, coverage_95), mean),
+    across(c(A, A_max, seesaw_error), median),
     .groups = "drop"
   )
 
 saveRDS(
-  list(compared = compared, metrics_rep = metrics_rep, metrics = metrics, failure_rates = results$failure_rates),
+  list(
+    compared = compared, metrics_rep = metrics_rep, metrics = metrics, A_truth = m$A_truth,
+    failure_rates = results$failure_rates
+  ),
   here::here("data-generated/qcs-hs-sparse-vs-biennial-self-test-metrics.rds")
 )
 
@@ -140,24 +138,47 @@ metrics_rep |>
 
 # Plots ----------------------------------------------------------------------
 
-metric_labels <- c(rmse = "RMSE (log)", coverage_50 = "50% CI coverage")
-nominal <- tibble::tibble(
-  metric = factor(metric_labels[["coverage_50"]], levels = metric_labels),
-  value = 0.5
+metric_labels <- c(
+  rmse = "RMSE (log)", coverage_50 = "50% CI coverage", A = "Seesaw A (%)",
+  A_max = paste0("Max A, ", seesaw_window, "-survey windows (%)"),
+  seesaw_error = "Seesaw error (%)"
 )
+# Nominal values; for A and max A, the median of the true index by species
+nominal <- bind_rows(
+  tidyr::expand_grid(
+    species = unique(metrics_rep$species),
+    tibble::tibble(metric = c("coverage_50", "seesaw_error"), value = c(0.5, 0))
+  ),
+  m$A_truth |>
+    group_by(species) |>
+    summarise(A = median(A), A_max = median(A_max)) |>
+    tidyr::pivot_longer(c(A, A_max), names_to = "metric")
+) |>
+  mutate(metric = factor(metric, levels = names(metric_labels), labels = metric_labels))
 
 rep_long <- metrics_rep |>
   tidyr::pivot_longer(all_of(names(metric_labels)), names_to = "metric") |>
   mutate(metric = factor(metric, levels = names(metric_labels), labels = metric_labels))
 
+# Summary across species: RMSE, coverage, and the signed seesaw error (the
+# estimated minus true seesaw, positive when the index reads high in occasions
+# the richer region is sampled; see self_test_metrics())
+summary_metrics <- metric_labels[c("rmse", "coverage_50", "seesaw_error")]
+summary_nominal <- filter(nominal, metric %in% summary_metrics, species == first(species)) |>
+  select(-species)
+rep_summary <- filter(rep_long, metric %in% summary_metrics)
+
 # One point per species (mean across replicates), connected between designs,
 # over the violins of all replicates pooled across species
-species_long <- rep_long |>
-  summarise(value = mean(value), .by = c(species, design, metric))
+species_long <- rep_summary |>
+  summarise(
+    value = if_else(first(metric) == metric_labels[["seesaw_error"]], median(value), mean(value)),
+    .by = c(species, design, metric)
+  )
 
 ggplot(species_long, aes(value, design)) +
-  geom_violin(data = rep_long, fill = "grey90", colour = NA, scale = "width") +
-  geom_vline(aes(xintercept = value), data = nominal, linetype = 2, colour = "grey50") +
+  geom_violin(data = rep_summary, fill = "grey90", colour = NA, scale = "width") +
+  geom_vline(aes(xintercept = value), data = summary_nominal, linetype = 2, colour = "grey50") +
   stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
   geom_path(aes(colour = species, group = species)) +
   geom_point(aes(colour = species)) +
@@ -166,7 +187,7 @@ ggplot(species_long, aes(value, design)) +
   labs(x = NULL, y = NULL, colour = NULL) +
   theme(legend.position = "bottom") +
   guides(colour = guide_legend(nrow = 2))
-ggsave(here::here("figs/qcs-hs-sparse-vs-biennial-self-test-summary.pdf"), width = 8, height = 3.8)
+ggsave(here::here("figs/qcs-hs-sparse-vs-biennial-self-test-summary.pdf"), width = 10, height = 3.8)
 
 # By species, all replicates
 ggplot(rep_long, aes(value, design)) +
@@ -177,7 +198,7 @@ ggplot(rep_long, aes(value, design)) +
   labs(x = NULL, y = NULL)
 ggsave(
   here::here("figs/qcs-hs-sparse-vs-biennial-self-test.pdf"),
-  width = 9, height = 1 + 1.6 * length(unique(rep_long$species))
+  width = 14, height = 1 + 1.6 * length(unique(rep_long$species))
 )
 
 # Indexes of the first three replicates
