@@ -12,7 +12,8 @@
 # 3. Two designs, with the same number of tows in each occasion (so the same
 #    average effort across the series):
 #    - alternating: all tows in one region per occasion (HS / QCS alternating),
-#      fit with IID RF + RW year (with the sigma_V prior)
+#      fit with IID RF + RW year (with the sigma_V prior) and with IID RF +
+#      factor(year)
 #    - overlap 10% / 25%: the alternating design, but with the 10% or 25% of
 #      the other region's tows closest to the sampled region added and the
 #      same number of tows dropped at random from the sampled region, so the
@@ -56,6 +57,8 @@ n_workers <- max(1L, min(60L, future::availableCores() - 2L))
 # Operating model; IID fields for the reasons given in analysis/08
 om_model <- "IID RF, factor(year)"
 sparse_models <- c("IID RF, factor(year)", "IID RF, RW year")
+alternating_models <- c("IID RF, factor(year)", "IID RF, RW year")
+# Baseline for the within-replicate RMSE ratios
 alternating_model <- "IID RF, RW year"
 # Overlap designs: percentage of the off region's tows sampled at the boundary
 overlap_pct <- c(10, 25)
@@ -66,10 +69,11 @@ full_model <- "IID RF, factor(year)"
 # Labels, in the order plotted; the alternating label has no suffix from
 # model_label()
 sparse_levels <- paste0(sparse_models, " (sparse annual)")
+alternating_levels <- paste0(alternating_models, " (alternating)")
 alternating_level <- paste0(alternating_model, " (alternating)")
 full_level <- paste0(full_model, " (full data)")
 overlap_levels <- paste0(rep(overlap_models, times = length(overlap_pct)), " (overlap ", rep(overlap_pct, each = length(overlap_models)), "%)")
-design_levels <- c(full_level, sparse_levels, overlap_levels, alternating_level)
+design_levels <- c(full_level, sparse_levels, overlap_levels, alternating_levels)
 
 # Run ------------------------------------------------------------------------
 
@@ -93,19 +97,20 @@ results <- run_self_test(
   models = tibble::tibble(
     design = c(
       "full", rep("sparse", length(sparse_models)),
-      rep(paste0("overlap", overlap_pct), each = length(overlap_models)), "alternating"
+      rep(paste0("overlap", overlap_pct), each = length(overlap_models)),
+      rep("alternating", length(alternating_models))
     ),
-    model = c(full_model, sparse_models, rep(overlap_models, times = length(overlap_pct)), alternating_model)
+    model = c(full_model, sparse_models, rep(overlap_models, times = length(overlap_pct)), alternating_models)
   ),
   n_workers = n_workers
 )
 
 # Metrics --------------------------------------------------------------------
 
-# self_test_metrics() groups by the model label; the design label also tells
-# the alternating fit from the others
+# self_test_metrics() groups by the model label; the alternating fits are the
+# ones with no design suffix, so add one
 label_design <- \(model) {
-  factor(if_else(model == alternating_model, alternating_level, model), levels = design_levels)
+  factor(if_else(grepl(" \\(.*\\)$", model), model, paste0(model, " (alternating)")), levels = design_levels)
 }
 m <- self_test_metrics(compare_to_truth(results), results, seesaw_window)
 compared <- mutate(m$compared, design = label_design(model))
@@ -172,38 +177,71 @@ rep_long <- metrics_rep |>
   tidyr::pivot_longer(all_of(names(metric_labels)), names_to = "metric") |>
   mutate(metric = factor(metric, levels = names(metric_labels), labels = metric_labels))
 
-# Summary across species: RMSE, coverage, and the signed seesaw error (the
-# estimated minus true seesaw, positive when the index reads high in occasions
-# the richer region is sampled; see self_test_metrics())
-summary_metrics <- metric_labels[c("rmse", "coverage_50", "seesaw_error")]
-summary_nominal <- filter(nominal, metric %in% summary_metrics, species == first(species)) |>
-  select(-species)
-rep_summary <- filter(rep_long, metric %in% summary_metrics)
-
-# One point per species (mean across replicates), connected between designs,
-# over the violins of all replicates pooled across species
-species_long <- rep_summary |>
-  summarise(
-    value = if_else(first(metric) == metric_labels[["seesaw_error"]], median(value), mean(value)),
-    .by = c(species, design, metric)
+# Summary across species (the signed seesaw error is estimated minus true
+# seesaw, positive when the index reads high in occasions the richer region is
+# sampled; see self_test_metrics()). One point per species (mean across
+# replicates; median for the seesaw error), connected between designs, over the
+# violins of all replicates pooled across species.
+#
+# With split = TRUE, rows are the year model (RW year, factor(year)); the full
+# data fit is shown in both rows
+split_year_model <- function(d) {
+  full <- filter(d, design == full_level)
+  design_short <- c("full data", "sparse annual", "overlap 10%", "overlap 25%", "alternating")
+  bind_rows(
+    filter(d, design != full_level) |>
+      mutate(year_model = if_else(grepl("RW year", design), "RW year", "factor(year)")),
+    mutate(full, year_model = "RW year"),
+    mutate(full, year_model = "factor(year)")
   ) |>
-  # geom_path joins points in row order
-  arrange(species, metric, design)
+    mutate(
+      design = factor(
+        if_else(design == full_level, "full data", sub(".*\\((.*)\\)$", "\\1", design)),
+        levels = design_short
+      ),
+      year_model = factor(year_model, levels = c("factor(year)", "RW year"))
+    )
+}
 
-ggplot(species_long, aes(value, design)) +
-  geom_violin(data = rep_summary, fill = "grey90", colour = NA, scale = "width") +
-  geom_vline(aes(xintercept = value), data = summary_nominal, linetype = 2, colour = "grey50") +
-  stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
-  geom_path(aes(colour = species, group = species)) +
-  geom_point(aes(colour = species)) +
-  facet_wrap(~metric, nrow = 1, scales = "free_x") +
-  scale_colour_brewer(palette = "Paired", labels = tools::toTitleCase) +
-  # first design at the top
-  scale_y_discrete(limits = rev) +
-  labs(x = NULL, y = NULL, colour = NULL) +
-  theme(legend.position = "bottom") +
-  guides(colour = guide_legend(nrow = 2))
-ggsave(here::here("figs/qcs-hs-sparse-vs-biennial-self-test-summary.pdf"), width = 10, height = 3.8)
+plot_summary <- function(metric_names, file, width, height, split = FALSE) {
+  summary_metrics <- metric_labels[metric_names]
+  summary_nominal <- filter(nominal, metric %in% summary_metrics, species == first(species)) |>
+    select(-species)
+  rep_summary <- filter(rep_long, metric %in% summary_metrics)
+  if (split) rep_summary <- split_year_model(rep_summary)
+  species_long <- rep_summary |>
+    summarise(
+      value = if_else(first(metric) == metric_labels[["seesaw_error"]], median(value), mean(value)),
+      .by = all_of(c("species", "design", "metric", if (split) "year_model"))
+    ) |>
+    # geom_path joins points in row order
+    arrange(species, metric, design)
+
+  ggplot(species_long, aes(value, design)) +
+    geom_violin(data = rep_summary, fill = "grey90", colour = NA, scale = "width") +
+    geom_vline(aes(xintercept = value), data = summary_nominal, linetype = 2, colour = "grey50") +
+    stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
+    geom_path(aes(colour = species, group = species)) +
+    geom_point(aes(colour = species)) +
+    (if (split) facet_grid(year_model ~ metric, scales = "free_x") else facet_wrap(~metric, nrow = 1, scales = "free_x")) +
+    scale_colour_brewer(palette = "Paired", labels = tools::toTitleCase) +
+    # first design at the top
+    scale_y_discrete(limits = rev) +
+    labs(x = NULL, y = NULL, colour = NULL) +
+    theme(legend.position = "bottom") +
+    guides(colour = guide_legend(nrow = 2))
+  ggsave(here::here(file), width = width, height = height)
+}
+plot_summary(
+  c("rmse", "coverage_50", "seesaw_error"),
+  "figs/qcs-hs-sparse-vs-biennial-self-test-summary.pdf", width = 12, height = 5
+)
+# Without coverage, for the many designs
+plot_summary(
+  c("rmse", "seesaw_error"),
+  "figs/qcs-hs-sparse-vs-biennial-self-test-summary-no-coverage.pdf", width = 9, height = 7,
+  split = TRUE
+)
 
 # By species, all replicates
 ggplot(rep_long, aes(value, design)) +
