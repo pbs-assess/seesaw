@@ -16,6 +16,7 @@
 #    - sparse annual: a random subsample of the tows of the whole domain
 #      (both regions) in every occasion, a different draw for each replicate,
 #      fit with IID RF + factor(year) and with IID RF + RW year
+#    Also the operating model refit to all tows, as the baseline.
 # 4. Score RMSE and 50% (and 95%) CI coverage of the bias-corrected index
 #    against the truth of each replicate.
 #
@@ -48,13 +49,15 @@ n_workers <- max(1L, min(60L, future::availableCores() - 2L))
 om_model <- "IID RF, factor(year)"
 sparse_models <- c("IID RF, factor(year)", "IID RF, RW year")
 alternating_model <- "IID RF, RW year"
+# All tows, the baseline (same as the operating model)
+full_model <- "IID RF, factor(year)"
 
-# Labels in the order plotted; the alternating label has no suffix from
+# Labels, in the order plotted; the alternating label has no suffix from
 # model_label()
-design_levels <- c(
-  paste0(sparse_models, " (sparse annual)"),
-  paste0(alternating_model, " (alternating)")
-)
+sparse_levels <- paste0(sparse_models, " (sparse annual)")
+alternating_level <- paste0(alternating_model, " (alternating)")
+full_level <- paste0(full_model, " (full data)")
+design_levels <- c(full_level, sparse_levels, alternating_level)
 
 # Run ------------------------------------------------------------------------
 
@@ -76,8 +79,8 @@ results <- run_self_test(
   setup_species = setup_species,
   simulate_rep = simulate_one_arm("spatiotemporal"),
   models = tibble::tibble(
-    design = c(rep("sparse", length(sparse_models)), "alternating"),
-    model = c(sparse_models, alternating_model)
+    design = c("full", rep("sparse", length(sparse_models)), "alternating"),
+    model = c(full_model, sparse_models, alternating_model)
   ),
   n_workers = n_workers
 )
@@ -126,10 +129,10 @@ metrics |>
 metrics_rep |>
   select(species, rep, design, rmse) |>
   tidyr::pivot_wider(names_from = design, values_from = rmse) |>
-  tidyr::pivot_longer(all_of(design_levels[1:2]), names_to = "sparse_model", values_to = "rmse_sparse") |>
+  tidyr::pivot_longer(all_of(sparse_levels), names_to = "sparse_model", values_to = "rmse_sparse") |>
   summarise(
-    rmse_ratio = exp(mean(log(rmse_sparse / .data[[design_levels[3]]]))),
-    prop_reps_sparse_better = mean(rmse_sparse < .data[[design_levels[3]]]),
+    rmse_ratio = exp(mean(log(rmse_sparse / .data[[alternating_level]]))),
+    prop_reps_sparse_better = mean(rmse_sparse < .data[[alternating_level]]),
     .by = c(species, sparse_model)
   ) |>
   mutate(across(where(is.numeric), \(x) round(x, 2))) |>
