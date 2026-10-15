@@ -15,7 +15,7 @@
 #      fit with IID RF + RW year (with the sigma_V prior)
 #    - sparse annual: a random subsample of the tows of the whole domain
 #      (both regions) in every occasion, a different draw for each replicate,
-#      fit with IID RF + factor(year)
+#      fit with IID RF + factor(year) and with IID RF + RW year
 # 4. Score RMSE and 50% (and 95%) CI coverage of the bias-corrected index
 #    against the truth of each replicate.
 #
@@ -46,12 +46,14 @@ n_workers <- max(1L, min(60L, future::availableCores() - 2L))
 
 # Operating model; IID fields for the reasons given in analysis/08
 om_model <- "IID RF, factor(year)"
-sparse_model <- "IID RF, factor(year)"
+sparse_models <- c("IID RF, factor(year)", "IID RF, RW year")
 alternating_model <- "IID RF, RW year"
 
-designs <- c(
-  sparse = paste0(sparse_model, " (sparse annual)"),
-  alternating = paste0(alternating_model, " (alternating)")
+# Labels in the order plotted; the alternating label has no suffix from
+# model_label()
+design_levels <- c(
+  paste0(sparse_models, " (sparse annual)"),
+  paste0(alternating_model, " (alternating)")
 )
 
 # Run ------------------------------------------------------------------------
@@ -74,8 +76,8 @@ results <- run_self_test(
   setup_species = setup_species,
   simulate_rep = simulate_one_arm("spatiotemporal"),
   models = tibble::tibble(
-    design = c("sparse", "alternating"),
-    model = c(sparse_model, alternating_model)
+    design = c(rep("sparse", length(sparse_models)), "alternating"),
+    model = c(sparse_models, alternating_model)
   ),
   n_workers = n_workers
 )
@@ -83,7 +85,12 @@ results <- run_self_test(
 # Metrics --------------------------------------------------------------------
 
 compared <- compare_to_truth(results) |>
-  mutate(design = factor(design, levels = names(designs), labels = designs))
+  mutate(
+    design = factor(
+      if_else(design == "alternating", paste0(model, " (alternating)"), model),
+      levels = design_levels
+    )
+  )
 
 metrics_rep <- compared |>
   group_by(species, rep, design) |>
@@ -112,15 +119,18 @@ metrics |>
   mutate(across(where(is.numeric), \(x) round(x, 2))) |>
   print(n = Inf, width = Inf)
 
-# Across species and replicates; the paired RMSE ratio is within a replicate
-# (same simulated population), < 1 when the sparse annual design is better
+# Within-replicate (same simulated population) RMSE of each sparse annual model
+# relative to the alternating design: geometric mean ratio across replicates,
+# and the proportion of replicates in which the sparse annual model has the
+# lower RMSE. Ratio < 1: sparse annual is better.
 metrics_rep |>
   select(species, rep, design, rmse) |>
   tidyr::pivot_wider(names_from = design, values_from = rmse) |>
+  tidyr::pivot_longer(all_of(design_levels[1:2]), names_to = "sparse_model", values_to = "rmse_sparse") |>
   summarise(
-    rmse_ratio_sparse_over_alternating = exp(mean(log(.data[[designs[["sparse"]]]] / .data[[designs[["alternating"]]]]))),
-    prop_reps_sparse_better = mean(.data[[designs[["sparse"]]]] < .data[[designs[["alternating"]]]]),
-    .by = species
+    rmse_ratio = exp(mean(log(rmse_sparse / .data[[design_levels[3]]]))),
+    prop_reps_sparse_better = mean(rmse_sparse < .data[[design_levels[3]]]),
+    .by = c(species, sparse_model)
   ) |>
   mutate(across(where(is.numeric), \(x) round(x, 2))) |>
   print(n = Inf, width = Inf)
@@ -137,8 +147,8 @@ rep_long <- metrics_rep |>
   tidyr::pivot_longer(all_of(names(metric_labels)), names_to = "metric") |>
   mutate(metric = factor(metric, levels = names(metric_labels), labels = metric_labels))
 
-# One point per species (mean across replicates) over the violins of all
-# replicates pooled across species
+# One point per species (mean across replicates), connected between designs,
+# over the violins of all replicates pooled across species
 species_long <- rep_long |>
   summarise(value = mean(value), .by = c(species, design, metric))
 
@@ -146,16 +156,11 @@ ggplot(species_long, aes(value, design)) +
   geom_violin(data = rep_long, fill = "grey90", colour = NA, scale = "width") +
   geom_vline(aes(xintercept = value), data = nominal, linetype = 2, colour = "grey50") +
   stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
-  geom_point(aes(colour = species), position = position_jitter(height = 0.15, seed = 1)) +
+  geom_path(aes(colour = species, group = species)) +
+  geom_point(aes(colour = species)) +
   facet_wrap(~metric, nrow = 1, scales = "free_x") +
   scale_colour_brewer(palette = "Paired", labels = tools::toTitleCase) +
-  labs(
-    x = NULL, y = NULL, colour = NULL,
-    caption = paste0(
-      "QCS + HS self-test, ", n_reps, " replicates per species, OM: ", om_model, ". ",
-      "Same tows per occasion in both designs. Dashed: nominal coverage."
-    )
-  ) +
+  labs(x = NULL, y = NULL, colour = NULL) +
   theme(legend.position = "bottom") +
   guides(colour = guide_legend(nrow = 2))
 ggsave(here::here("figs/qcs-hs-sparse-vs-biennial-self-test-summary.pdf"), width = 8, height = 3.8)
