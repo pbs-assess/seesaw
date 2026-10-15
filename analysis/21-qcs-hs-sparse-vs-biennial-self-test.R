@@ -13,6 +13,11 @@
 #    average effort across the series):
 #    - alternating: all tows in one region per occasion (HS / QCS alternating),
 #      fit with IID RF + RW year (with the sigma_V prior)
+#    - overlap 10% / 25%: the alternating design, but with the 10% or 25% of
+#      the other region's tows closest to the sampled region added and the
+#      same number of tows dropped at random from the sampled region, so the
+#      surveys overlap at the boundary; each fit with IID RF + factor(year)
+#      and with IID RF + RW year
 #    - sparse annual: a random subsample of the tows of the whole domain
 #      (both regions) in every occasion, a different draw for each replicate,
 #      fit with IID RF + factor(year) and with IID RF + RW year
@@ -52,6 +57,9 @@ n_workers <- max(1L, min(60L, future::availableCores() - 2L))
 om_model <- "IID RF, factor(year)"
 sparse_models <- c("IID RF, factor(year)", "IID RF, RW year")
 alternating_model <- "IID RF, RW year"
+# Overlap designs: percentage of the off region's tows sampled at the boundary
+overlap_pct <- c(10, 25)
+overlap_models <- c("IID RF, factor(year)", "IID RF, RW year")
 # All tows, the baseline (same as the operating model)
 full_model <- "IID RF, factor(year)"
 
@@ -60,7 +68,8 @@ full_model <- "IID RF, factor(year)"
 sparse_levels <- paste0(sparse_models, " (sparse annual)")
 alternating_level <- paste0(alternating_model, " (alternating)")
 full_level <- paste0(full_model, " (full data)")
-design_levels <- c(full_level, sparse_levels, alternating_level)
+overlap_levels <- paste0(rep(overlap_models, times = length(overlap_pct)), " (overlap ", rep(overlap_pct, each = length(overlap_models)), "%)")
+design_levels <- c(full_level, sparse_levels, overlap_levels, alternating_level)
 
 # Run ------------------------------------------------------------------------
 
@@ -82,8 +91,11 @@ results <- run_self_test(
   setup_species = setup_species,
   simulate_rep = simulate_one_arm("spatiotemporal"),
   models = tibble::tibble(
-    design = c("full", rep("sparse", length(sparse_models)), "alternating"),
-    model = c(full_model, sparse_models, alternating_model)
+    design = c(
+      "full", rep("sparse", length(sparse_models)),
+      rep(paste0("overlap", overlap_pct), each = length(overlap_models)), "alternating"
+    ),
+    model = c(full_model, sparse_models, rep(overlap_models, times = length(overlap_pct)), alternating_model)
   ),
   n_workers = n_workers
 )
@@ -120,18 +132,18 @@ metrics |>
   mutate(across(where(is.numeric), \(x) round(x, 2))) |>
   print(n = Inf, width = Inf)
 
-# Within-replicate (same simulated population) RMSE of each sparse annual model
-# relative to the alternating design: geometric mean ratio across replicates,
-# and the proportion of replicates in which the sparse annual model has the
-# lower RMSE. Ratio < 1: sparse annual is better.
+# Within-replicate (same simulated population) RMSE of each sparse annual and
+# overlap design relative to the alternating design: geometric mean ratio
+# across replicates, and the proportion of replicates in which it has the
+# lower RMSE. Ratio < 1: better than alternating.
 metrics_rep |>
   select(species, rep, design, rmse) |>
   tidyr::pivot_wider(names_from = design, values_from = rmse) |>
-  tidyr::pivot_longer(all_of(sparse_levels), names_to = "sparse_model", values_to = "rmse_sparse") |>
+  tidyr::pivot_longer(all_of(c(sparse_levels, overlap_levels)), names_to = "design", values_to = "rmse_design") |>
   summarise(
-    rmse_ratio = exp(mean(log(rmse_sparse / .data[[alternating_level]]))),
-    prop_reps_sparse_better = mean(rmse_sparse < .data[[alternating_level]]),
-    .by = c(species, sparse_model)
+    rmse_ratio = exp(mean(log(rmse_design / .data[[alternating_level]]))),
+    prop_reps_better = mean(rmse_design < .data[[alternating_level]]),
+    .by = c(species, design)
   ) |>
   mutate(across(where(is.numeric), \(x) round(x, 2))) |>
   print(n = Inf, width = Inf)
@@ -174,7 +186,9 @@ species_long <- rep_summary |>
   summarise(
     value = if_else(first(metric) == metric_labels[["seesaw_error"]], median(value), mean(value)),
     .by = c(species, design, metric)
-  )
+  ) |>
+  # geom_path joins points in row order
+  arrange(species, metric, design)
 
 ggplot(species_long, aes(value, design)) +
   geom_violin(data = rep_summary, fill = "grey90", colour = NA, scale = "width") +
@@ -184,6 +198,8 @@ ggplot(species_long, aes(value, design)) +
   geom_point(aes(colour = species)) +
   facet_wrap(~metric, nrow = 1, scales = "free_x") +
   scale_colour_brewer(palette = "Paired", labels = tools::toTitleCase) +
+  # first design at the top
+  scale_y_discrete(limits = rev) +
   labs(x = NULL, y = NULL, colour = NULL) +
   theme(legend.position = "bottom") +
   guides(colour = guide_legend(nrow = 2))
@@ -195,6 +211,7 @@ ggplot(rep_long, aes(value, design)) +
   geom_boxplot(outlier.shape = NA) +
   geom_point(position = position_jitter(height = 0.15), alpha = 0.4) +
   facet_grid(species ~ metric, scales = "free_x") +
+  scale_y_discrete(limits = rev) +
   labs(x = NULL, y = NULL)
 ggsave(
   here::here("figs/qcs-hs-sparse-vs-biennial-self-test.pdf"),

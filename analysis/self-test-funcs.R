@@ -106,10 +106,40 @@ sparse_keep <- function(setup, rep) {
   keep
 }
 
+# Tows kept by an "overlap" design with proportion `p`: in each occasion, the
+# off-region tows closest to the primary region (p of the off region's tows)
+# are added, and the same number of tows are dropped at random from the primary
+# region. So each occasion has exactly as many tows as the alternating design,
+# but the surveys overlap at the boundary. A different draw of the dropped
+# tows for each replicate, reproducible from `rep`.
+overlap_keep <- function(setup, rep, p) {
+  dat <- setup$dat
+  grid_xy <- distinct(setup$grid, X, Y, survey)
+  # Distance (km) from each tow to the nearest grid cell of the other region
+  dist_to_other <- numeric(nrow(dat))
+  for (s in unique(dat$survey_name)) {
+    i <- dat$survey_name == s
+    other <- as.matrix(grid_xy[grid_xy$survey != s, c("X", "Y")])
+    dist_to_other[i] <- FNN::get.knnx(other, as.matrix(dat[i, c("X", "Y")]), k = 1L)$nn.dist[, 1L]
+  }
+  set.seed(seed_extra + rep)
+  keep <- setup$is_sampled
+  for (y in unique(dat$year)) {
+    primary <- which(dat$year == y & setup$is_sampled)
+    off <- which(dat$year == y & !setup$is_sampled)
+    k <- round(p * length(off))
+    keep[off[order(dist_to_other[off])[seq_len(k)]]] <- TRUE
+    keep[primary[sample.int(length(primary), k)]] <- FALSE
+  }
+  keep
+}
+
 # Fit one model to one replicate's simulated catches: to all tows ("full"), to
-# the sampled half of each occasion ("alternating"), or to a random subsample
-# of the whole domain with the same effort ("sparse"). Returns the index, or
-# an empty tibble if the fit fails sanity checks.
+# the sampled half of each occasion ("alternating"), to a random subsample of
+# the whole domain with the same effort ("sparse"), or to the alternating tows
+# with the boundary overlapped at the same effort ("overlap10", "overlap25":
+# the percentage of the off region's tows). Returns the index, or an empty
+# tibble if the fit fails sanity checks.
 fit_index <- function(setup, catch, design, model, index_nsplit = 2L, rep = NA_integer_) {
   d <- setup$dat
   d$catch_weight <- catch
@@ -117,8 +147,13 @@ fit_index <- function(setup, catch, design, model, index_nsplit = 2L, rep = NA_i
   if (design == "alternating") {
     d <- d[setup$is_sampled, ]
     mesh <- setup$mesh_alt
-  } else if (design == "sparse") {
-    d <- d[sparse_keep(setup, rep), ]
+  } else if (design == "sparse" || startsWith(design, "overlap")) {
+    keep <- if (design == "sparse") {
+      sparse_keep(setup, rep)
+    } else {
+      overlap_keep(setup, rep, as.numeric(sub("overlap", "", design)) / 100)
+    }
+    d <- d[keep, ]
     # same knots as the other designs
     mesh <- make_mesh(d, c("X", "Y"), mesh = setup$mesh$mesh)
   }
@@ -301,6 +336,7 @@ model_label <- \(model, design) {
   case_when(
     design == "full" ~ paste0(model, " (full data)"),
     design == "sparse" ~ paste0(model, " (sparse annual)"),
+    startsWith(design, "overlap") ~ paste0(model, " (", sub("overlap", "overlap ", design), "%)"),
     .default = model
   )
 }
