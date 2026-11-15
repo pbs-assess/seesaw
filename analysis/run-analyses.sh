@@ -17,7 +17,6 @@ for s in \
   04-fit-afsc-pbs-models \
   06-fit-hbll-models \
   08-qcs-hs-biennial-self-test \
-  13-qcs-hs-omega-swap \
   11-nwfsc-split-self-test; do
   echo "$(date '+%F %T') start $s" >> logs/run-analyses.log
   Rscript "analysis/$s.R" > "logs/$s.log" 2>&1
