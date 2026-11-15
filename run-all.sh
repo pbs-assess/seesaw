@@ -67,3 +67,8 @@ if [ "$diagnostics" = true ]; then run fig-index-diagnostics; fi
 for f in figs/*; do
   grep -q "^  $(basename "$f" .pdf)\$" copy-figs-to-overleaf.sh || echo "Not a paper figure: $f" | tee -a logs/run-all.log
 done
+
+# Only on the machine with the Overleaf clone (not on the server)
+if [ -d "$HOME/src/seesaw-overleaf/figs" ]; then
+  ./copy-figs-to-overleaf.sh >> logs/run-all.log 2>&1
+fi
