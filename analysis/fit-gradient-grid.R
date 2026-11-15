@@ -18,7 +18,7 @@ todo <- filter(tasks, !file.exists(cache_file))
 log_file <- progress_log("gradient-grid")
 
 if (nrow(todo) > 0L) {
-  n_workers <- max(1L, min(60L, parallelly::availableCores() - 2L))
+  n_workers <- max(1L, min(78L, parallelly::availableCores() - 2L))
   log_progress(log_file, "=== run started: ", nrow(todo), " of ", nrow(tasks), " tasks to run, ", n_workers, " workers ===")
   future::plan(future::multisession, workers = n_workers)
   furrr::future_pwalk(

@@ -32,7 +32,7 @@ grid_res_km <- 6 # coarsened from 2 km to cut prediction cost
 index_nsplit <- 6L # to limit peak memory per worker
 mesh_cutoff <- 15 # ~600 nodes
 # Peak memory was ~3.5 GB per worker with mesh_cutoff = 15
-n_workers <- max(1L, min(40L, parallelly::availableCores() - 2L))
+n_workers <- max(1L, min(50L, parallelly::availableCores() - 2L))
 
 # The operating model has IID spatiotemporal fields; with AR1, rho went to ~1
 # for several species here (see fit-self-test-qcs-hs.R)

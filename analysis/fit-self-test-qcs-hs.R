@@ -9,7 +9,7 @@ source(here::here("analysis/R/survey-data.R"))
 load_surveyjoin()
 
 n_reps <- 30L
-n_workers <- max(1L, min(60L, parallelly::availableCores() - 2L))
+n_workers <- max(1L, min(78L, parallelly::availableCores() - 2L))
 
 # The operating model has IID spatiotemporal fields: with AR1, rho can go to
 # ~1, so each replicate's new epsilon_st is in effect a second, persistent
