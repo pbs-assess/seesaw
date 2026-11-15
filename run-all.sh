@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# Run every fit script, then every paper figure script. Run from anywhere,
-# e.g. overnight on a server:
-#   nohup ./run-all.sh > /dev/null 2>&1 &
+# Runs every fit script and then every figure script
 #
-#   ./run-all.sh               fits (each skips what is already cached), then figures
-#   ./run-all.sh --figs-only   just the figure scripts (seconds to minutes)
-#   ./run-all.sh --diagnostics also the non-paper index diagnostics (diagnostics/)
+# ./run-all.sh               fits (each skips what is already cached), then figures
+# ./run-all.sh --figs-only   just the figure scripts (seconds to minutes)
+# ./run-all.sh --diagnostics also the non-paper index diagnostics (diagnostics/)
 #
-# A script that fails doesn't stop the rest. Progress is in logs/run-all.log
-# and each script's output in logs/<script>.log. Package versions are written
-# to session-info.txt (tracked).
+# Progress is in logs/run-all.log
+# each script's output is in logs/<script>.log. 
+# Package versions are written to session-info.txt
 #
-# Fits are slow (hours to days in total; the self-tests most of all). Each
-# fit script caches its output in data-generated/; delete a cache to refit.
+# Fits are slow (hours to days in total; the self-tests most of all).
+#
+# Each fit script caches its output in data-generated/; delete a cache to refit.
 
 cd "$(dirname "$0")" || exit 1
 mkdir -p logs
@@ -36,7 +35,7 @@ fits=(
   fit-gradient-example
   fit-prior-sensitivity
   fit-self-test-qcs-hs
-  fit-self-test-nwfsc # longest; its fits are cached as they finish, so it can be restarted
+  fit-self-test-nwfsc
 )
 figs=(
   fig-case-study-maps
