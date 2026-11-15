@@ -1,10 +1,3 @@
-# Figure 1: maps of the four case-study surveys, coloured by the regions that
-# alternate between years (the case studies in 09-case-study-summary.R):
-#   a GOA + BC trawl: GOA and QCS + HS (odd) vs. WCHG + WCVI (even)
-#   b Norwegian gillnet-fyke net: North vs. South
-#   c BC trawl: QCS + HS (odd years) vs. WCHG + WCVI (even years)
-#   d BC longline: North vs. South
-#
 # The 2 x 2 km (BC) and 2 x 2 nmi (GOA) survey grid cells are drawn as squares
 # in their native projections and dissolved into one polygon per survey, so
 # the figure stays a small vector PDF. Norway's prediction grid is 50 sites,
@@ -17,8 +10,7 @@ library(patchwork)
 
 sf_use_s2(FALSE)
 
-# Okabe-Ito blue and vermillion (colour-blind safe) for the two alternating
-# regions, plus a fainter blue for GOA (same odd-year group as QCS + HS)
+# Fainter blue for GOA: same odd-year group as QCS + HS
 region_cols <- c(goa = "#A6CBE3", a = "#0072B2", b = "#D55E00")
 land_col <- "grey82"
 crs_bc <- 3005 # BC Albers
@@ -116,9 +108,8 @@ by_phase <- function(x, close = 600) {
     st_buffer(-close)
 }
 
-# Text labels placed at lon/lat
 lab_df <- function(..., crs) {
-  d <- tibble::tribble(~label, ~lon, ~lat, ~kind, ...)
+  d <- tribble(~label, ~lon, ~lat, ~kind, ...)
   xy <- st_coordinates(st_transform(st_as_sf(d, coords = c("lon", "lat"), crs = 4326), crs))
   mutate(d, X = xy[, 1], Y = xy[, 2])
 }
@@ -290,4 +281,3 @@ fig_w <- grid::convertWidth(sum(gt$widths), "in", valueOnly = TRUE)
 fig_h <- grid::convertHeight(sum(gt$heights), "in", valueOnly = TRUE)
 
 ggsave(here::here("figs/case-study-maps.pdf"), g, width = fig_w, height = fig_h, device = cairo_pdf)
-ggsave(here::here("figs/case-study-maps.png"), g, width = fig_w, height = fig_h, dpi = 300, device = ragg::agg_png)
