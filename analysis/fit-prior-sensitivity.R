@@ -10,6 +10,7 @@ source(here::here("analysis/R/survey-data.R"))
 load_surveyjoin()
 
 out_file <- here::here("data-generated/prior-sensitivity.rds")
+dir.create(dirname(out_file), showWarnings = FALSE)
 # Delete out_file to refit
 if (!file.exists(out_file)) {
   prior_grid <- crossing(target_sd = c(0.1, 0.3, 0.5), sdlog = c(0.1, 0.3, 0.5, 0.8)) |>

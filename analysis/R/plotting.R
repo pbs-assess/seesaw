@@ -3,6 +3,7 @@ library(tidyr)
 library(purrr)
 library(ggplot2)
 theme_set(ggsidekick::theme_sleek())
+dir.create(here::here("figs"), showWarnings = FALSE)
 
 # Okabe-Ito (colour-blind safe), dropping black and yellow
 highlight_colours <- function(n) {

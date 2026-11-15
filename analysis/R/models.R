@@ -103,6 +103,7 @@ run_case_study <- function(species, fit_species, file, n_workers) {
     cli::cli_warn("{nrow(failed)} fit(s) failed sanity checks or errored")
     print(failed, n = Inf)
   }
+  dir.create(dirname(file), showWarnings = FALSE, recursive = TRUE)
   saveRDS(list(indexes = indexes, fit_status = fit_status), file)
 }
 

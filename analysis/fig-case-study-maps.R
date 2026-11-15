@@ -7,6 +7,7 @@ library(dplyr)
 library(ggplot2)
 library(sf)
 library(patchwork)
+dir.create(here::here("figs"), showWarnings = FALSE)
 
 sf_use_s2(FALSE)
 
