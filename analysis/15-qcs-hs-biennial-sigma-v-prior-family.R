@@ -131,7 +131,7 @@ densities <- prior_grid |>
   ungroup()
 
 panel_labs <- \(d) mutate(d,
-  target_lab = factor(paste("Target =", target_sd)),
+  target_lab = factor(paste("Mode =", target_sd)),
   sdlog_lab = factor(paste("sdlog =", sdlog), levels = paste("sdlog =", sort(unique(prior_grid$sdlog))))
 )
 
@@ -169,9 +169,6 @@ ggplot(panel_labs(indexes_scaled), aes(cal_year, est)) +
   facet_grid(target_lab ~ sdlog_lab) +
   scale_x_continuous(breaks = c(2010, 2020)) +
   scale_shape_manual(values = c(`SYN HS` = 19, `SYN QCS` = 21)) +
-  labs(
-    x = "Year", y = "Relative biomass index", shape = "Region sampled",
-    caption = "Black and grey: full-data reference index and its 95% CI."
-  ) +
+  labs(x = "Year", y = "Relative biomass index", shape = "Region sampled") +
   theme(legend.position = "bottom")
 ggsave(here::here("figs/qcs-hs-biennial-sigma-v-prior-family-indexes.pdf"), width = 7, height = 5)

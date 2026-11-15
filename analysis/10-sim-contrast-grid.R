@@ -199,8 +199,10 @@ out <- semi_join(out, common_seeds, by = c("delta", "sigma_O", "seed"))
 # then express it as a percentage: 100 * (exp(bias) - 1), how much too high
 # the index reads in north years relative to south years, compared with the
 # truth (the seesaw error, as in the self-tests). Unlike A, it is signed and
-# not inflated by noise.
-beta_of <- \(x, year) period2_metric(x, year = year)[["beta"]]
+# not inflated by noise. As in the self-tests, beta is averaged over moving
+# windows (8 years: the series is only 12 years long).
+seesaw_window <- 8L
+beta_of <- \(x, year) mean(moving_window(x, year = year, window = seesaw_window)$beta)
 
 metrics <- out |>
   arrange(delta, sigma_O, seed, model, year) |>
@@ -253,10 +255,11 @@ ggplot(cell_summary, aes(delta, seesaw_med, colour = factor(sigma_O))) +
   facet_wrap(~model) +
   labs(
     x = expression("North-south difference in log density" ~ (Delta)),
-    y = "Seesaw error (%): north-year index\ntoo high relative to south years",
+    y = "Signed seesaw error (%)\n(north years too high)",
     colour = expression(Spatial ~ SD ~ (sigma[O]))
   )
-ggsave(here::here("figs/contrast-grid-bias-delta.pdf"), width = 7, height = 3.5)
+# cairo_pdf so the plotmath Delta renders (the default pdf device drops it)
+ggsave(here::here("figs/contrast-grid-bias-delta.pdf"), width = 7, height = 3.5, device = cairo_pdf)
 
 # Diagnostic: estimated ratio from each biennial fit against the true ratio
 # (Delta = 0 has no ratio to show on a log axis)

@@ -28,7 +28,12 @@ covariates_one <- function(sp) {
 
   # Expected density on the prediction grid, by region (HS vs. QCS), averaged
   # over years
-  p <- predict(s$fit_om, newdata = s$grid, return_tmb_object = FALSE)
+  # The cached fits predate the installed sdmTMB, which dropped the 4 trailing
+  # matern_svc entries from the prior vector; trim them so predict() works
+  # without refitting
+  fit <- s$fit_om
+  fit$tmb_data$priors <- fit$tmb_data$priors[seq_len(24L)]
+  p <- suppressWarnings(predict(fit, newdata = s$grid))
   p$dens <- exp(p$est1 + p$est2)
   reg <- p |>
     summarise(

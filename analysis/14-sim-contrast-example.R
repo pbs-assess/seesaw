@@ -108,7 +108,7 @@ year_effects <- bind_rows(
 
 # Contrast grid -----------------------------------------------------------------
 
-# Metrics section of 10-sim-contrast-grid.R (excess seesaw A by cell and seed)
+# Metrics section of 10-sim-contrast-grid.R (seesaw error by cell and seed)
 out <- readRDS(here::here("data-generated/contrast-grid.rds"))
 eval(parse(text = lines[grep("^# Metrics", lines):(grep("^# Plots", lines) - 1)]))
 grid_cells <- filter(cell_summary, sigma_O == !!sigma_O)
@@ -137,7 +137,12 @@ g_maps <- ggplot(spatial, aes(X, Y, fill = omega)) +
     breaks = log(c(1 / 16, 1 / 4, 1, 4, 16)), labels = fold_labels
   ) +
   coord_equal(expand = FALSE) +
-  facet_wrap(~field) +
+  ggh4x::facet_wrap2(
+    ~field,
+    strip = ggh4x::strip_themed(
+      text_x = purrr::map(field_colours, \(x) element_text(colour = x))
+    )
+  ) +
   labs(x = "X", y = "Y", fill = "Spatial\neffect") +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 
@@ -164,15 +169,15 @@ g_years <- ggplot(year_effects, aes(year, effect, colour = field)) +
   scale_y_continuous(breaks = log(c(0.5, 1, 2)), labels = fold_labels) +
   labs(x = "Year", y = "Year effect", colour = NULL, shape = "Region\nsampled")
 
-# Excess seesaw across the grid at this sigma_O (median and IQR across seeds);
+# Seesaw error across the grid at this sigma_O (median and IQR across seeds);
 # crosses: this example. Colours match the legend, so no legend of its own.
 dodge <- position_dodge(width = 0.12)
-g_grid <- ggplot(grid_cells, aes(delta, excess_med, colour = model)) +
+g_grid <- ggplot(grid_cells, aes(delta, seesaw_med, colour = model)) +
   geom_hline(yintercept = 0, colour = "grey80") +
-  geom_linerange(aes(ymin = excess_lo, ymax = excess_hi), position = dodge, show.legend = FALSE) +
+  geom_linerange(aes(ymin = seesaw_lo, ymax = seesaw_hi), position = dodge, show.legend = FALSE) +
   geom_line(position = dodge, show.legend = FALSE) +
   geom_point(position = dodge, show.legend = FALSE) +
-  geom_point(aes(y = excess_A), data = this_rep, shape = 4, position = dodge, show.legend = FALSE) +
+  geom_point(aes(y = seesaw_error), data = this_rep, shape = 4, position = dodge, show.legend = FALSE) +
   scale_colour_manual(values = field_colours) +
   # Delta is a log difference: label as a fold difference at round ratios
   scale_x_continuous(
@@ -180,7 +185,7 @@ g_grid <- ggplot(grid_cells, aes(delta, excess_med, colour = model)) +
     labels = fold_labels,
     expand = expansion(mult = 0.08)
   ) +
-  labs(x = "North:south density ratio", y = "Excess\nseesaw A (%)")
+  labs(x = "North:south density ratio", y = "Signed seesaw\nerror (%)")
 
 # Top: maps and the profile at the same size; bottom: the consequences. All
 # legends in one left-justified column.

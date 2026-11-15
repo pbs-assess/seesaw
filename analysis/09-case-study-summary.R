@@ -1,9 +1,12 @@
 # Combined case-study figure: moving-window seesaw amplitude by model for the
-# BC synoptic trawl, HBLL OUT, and transboundary AFSC GOA + PBS trawl surveys
-# (one row each), with sparklines of the most seesawing stocks beside each.
+# transboundary GOA + BC trawl, Norwegian gillnet-fyke net, BC trawl, and BC
+# longline surveys (one row each, in the order of the maps), with sparklines of the
+# most seesawing stocks beside each. Norway uses the fits to all the data
+# (both regions sampled in 2024-2026), not the alternating subset.
 #
 # Uses the cached index fits from 03-fit-syn-models.R,
-# 04-fit-afsc-pbs-models.R, and 06-fit-hbll-models.R; run those first.
+# 04-fit-afsc-pbs-models.R, 06-fit-hbll-models.R, and 19-fit-norway-models.R;
+# run those first.
 
 library(dplyr)
 library(ggplot2)
@@ -32,10 +35,32 @@ hbll_phase <- readRDS(here::here("data-raw/hbll-out-sets.rds")) |>
   select(year, phase)
 stopifnot(!any(duplicated(hbll_phase$year)))
 
+# Norway N and S alternate 2013-2023 (no 2014 survey); in 2024+ both are
+# sampled, and phase there follows the region the alternating subset would
+# sample (as in 19-fit-norway-models.R)
+norway_sites <- readRDS(here::here("data-raw/garn_ruse_predgrid.rds")) |>
+  ungroup() |>
+  distinct(site, subarea)
+norway_phase <- readRDS(here::here("data-raw/garn_ruse_catch_21sp-2026.rds")) |>
+  inner_join(norway_sites, by = "site") |>
+  filter(year < 2024) |>
+  distinct(year, subarea) |>
+  mutate(subarea = as.character(subarea)) |>
+  bind_rows(tibble::tibble(year = 2024:2026, subarea = c("North", "South", "North"))) |>
+  mutate(phase = ifelse(subarea == "North", 0.5, -0.5)) |>
+  select(year, phase)
+stopifnot(!any(duplicated(norway_phase$year)))
+
+# Order, titles and panel tags match the maps in 23-case-study-maps.R
 case_studies <- list(
-  "BC synoptic trawl" = list(out = read_indexes("bc-indexes4.rds"), phase = NULL),
-  "HBLL outside" = list(out = read_indexes("hbll-indexes.rds"), phase = hbll_phase),
-  "AFSC GOA + PBS synoptic trawl" = list(out = read_indexes("transboundary-afsc-pbs-indexes.rds"), phase = NULL)
+  "Gulf of Alaska (GOA) + BC trawl" = list(out = read_indexes("transboundary-afsc-pbs-indexes.rds"), phase = NULL),
+  "Norwegian gillnet–fyke net" = list(
+    out = read_indexes("norway-fit-indexes-all-data.rds") |>
+      mutate(species = replace(species, species == "Pollack", "Pollock")),
+    phase = norway_phase
+  ),
+  "BC trawl" = list(out = read_indexes("bc-indexes4.rds"), phase = NULL),
+  "BC longline" = list(out = read_indexes("hbll-indexes.rds"), phase = hbll_phase)
 )
 
 calc_mw <- function(out, phase) {
@@ -68,10 +93,19 @@ top_stocks <- function(mw) {
     pull(species)
 }
 
-plot_A_panel <- function(mw, title, show_x_title) {
-  plot_A_moving_window(mw, seesaw_window, connect_stocks = TRUE, n_highlight = n_top) +
+plot_A_panel <- function(mw, title, tag, show_x_title) {
+  g <- plot_A_moving_window(mw, seesaw_window, connect_stocks = TRUE, n_highlight = n_top)
+  # The default breaks crowd together on the sqrt scale when A runs into the
+  # thousands (Norway)
+  if (max(mw$A) > 1000) {
+    g <- suppressMessages(g + scale_y_sqrt(
+      limits = c(0, NA), breaks = c(0, 10, 50, 200, 500, 1000, 2000),
+      expand = expansion(mult = c(0, 0.05))
+    ))
+  }
+  g +
     scale_x_discrete(limits = model_order) +
-    ggtitle(title) +
+    labs(title = title, tag = tag) +
     theme(
       legend.position = "none",
       plot.title = element_text(size = rel(1)),
@@ -137,14 +171,14 @@ plot_sparklines <- function(out, mw, show_header) {
     )
 }
 
-# One 3 x 2 grid (not nested rows) so the columns align across case studies
+# One 4 x 2 grid (not nested rows) so the columns align across case studies
 panels <- purrr::imap(names(case_studies), \(cs, i) {
   list(
-    plot_A_panel(seesaw_mw[[cs]], cs, show_x_title = i == length(case_studies)),
+    plot_A_panel(seesaw_mw[[cs]], cs, letters[i], show_x_title = i == length(case_studies)),
     plot_sparklines(case_studies[[cs]]$out, seesaw_mw[[cs]], show_header = i == 1L)
   )
 }) |>
   purrr::list_flatten()
 
 wrap_plots(panels, ncol = 2, widths = c(1.5, 1))
-ggsave(here::here("figs/case-study-A-moving-window.pdf"), width = 7.5, height = 8)
+ggsave(here::here("figs/case-study-A-moving-window.pdf"), width = 7.5, height = 10.5, device = cairo_pdf)

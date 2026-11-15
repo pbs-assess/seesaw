@@ -23,3 +23,10 @@ text/seesaw.blg
 renv.lock
 *.rds
 data-generated/norway-species/*/
+data-outputs/residual-seesaw-arms.csv
+data-outputs/residual-seesaw-mechanism.csv
+data-outputs/residual-seesaw-paired.csv
+data-outputs/residual-seesaw-stage1-arms.csv
+data-outputs/residual-seesaw-stage1-mechanism.csv
+data-outputs/residual-seesaw-stage1-paired.csv
+refactor-plan.md

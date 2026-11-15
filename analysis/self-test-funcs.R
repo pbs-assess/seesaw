@@ -689,6 +689,193 @@ self_test_metrics <- function(compared, results, window) {
   )
 }
 
+# Summary across species (a ggplot, no file written); see plot_self_test().
+# `window` (survey occasions) must match the one used for the metrics in `m`:
+# 8 for QCS + HS (fewer occasions), 10 elsewhere. No default, so it can't be
+# left out by accident.
+plot_self_test_summary <- function(m, full_model, window, seesaw_max = NULL, rmse_pad = 0,
+                                   seesaw_metric = c("error", "retention", "error_variability"),
+                                   retention_min = 0.1) {
+  seesaw_metric <- match.arg(seesaw_metric)
+  # Models ordered by mean RMSE across species
+  model_order <- m$metrics |>
+    group_by(model) |>
+    summarise(rmse = mean(rmse)) |>
+    arrange(rmse) |>
+    pull(model)
+
+  # Summary across species: one point per species, each a summary across
+  # replicates, scaled so species are comparable; violins show all replicates
+  # pooled across species. RMSE is relative to the species' mean full-data
+  # operating model RMSE (how much is lost by sampling one half per occasion).
+  # The seesaw error is signed and relative to the true index in the same
+  # replicate (spurious seesaw from the model, not from the simulated
+  # population); see self_test_metrics().
+  #
+  # With seesaw_metric = "retention", the third panel is instead the estimated
+  # seesaw (beta) divided by the true one in the same replicate: below 1, the
+  # fit flattens the seesaw; 1, it recovers it; above 1, it exaggerates it;
+  # negative, it reverses it. The violins only use replicates with a true
+  # |beta| above retention_min (log scale; the ratio is unstable near zero) and
+  # the species points are the slope through the origin of estimated on true
+  # beta pooled over all replicates (weighted toward the big true seesaws).
+  #
+  # With seesaw_metric = "error_variability", the third and fourth panels are
+  # the absolute seesaw error, |estimated - true beta| as a percentage, and the
+  # year-to-year variability ratio, SD(diff(log est)) / SD(diff(log true)), on
+  # a log scale. The seesaw error has a second reference line at the error from
+  # estimating no seesaw at all (the median true |beta|), the floor for a model
+  # that smooths the seesaw away. The variability ratio shows the trade-off:
+  # above 1, the index is wigglier than the truth (differencing weights the
+  # period-2 seesaw most); below 1, it is oversmoothed.
+  if (seesaw_metric %in% c("retention", "error_variability")) {
+    beta <- m$compared |>
+      arrange(species, rep, model, year) |>
+      group_by(species, rep, model) |>
+      summarise(
+        beta_est = mean(seesaw_beta(est, phase, year, window)),
+        beta_true = mean(seesaw_beta(true_est, phase, year, window)),
+        variability = sd(diff(log(est))) / sd(diff(log(true_est))),
+        .groups = "drop"
+      )
+    m$metrics_rep <- m$metrics_rep |>
+      left_join(beta, by = c("species", "rep", "model")) |>
+      mutate(
+        retention = if_else(abs(beta_true) > retention_min, beta_est / beta_true, NA_real_),
+        seesaw_abs_error = 100 * (exp(abs(beta_est - beta_true)) - 1)
+      )
+    slopes <- beta |>
+      group_by(species, model) |>
+      summarise(slope = sum(beta_est * beta_true) / sum(beta_true^2), .groups = "drop")
+    # beta_true is the same across models within a replicate
+    no_seesaw_error <- beta |>
+      distinct(species, rep, beta_true) |>
+      summarise(value = 100 * (exp(median(abs(beta_true))) - 1)) |>
+      pull(value)
+  }
+  seesaw_levels <- switch(seesaw_metric,
+    error = "seesaw_error",
+    retention = "retention",
+    error_variability = c("seesaw_abs_error", "variability")
+  )
+  summary_levels <- c("rmse_ratio", "coverage_50", seesaw_levels)
+  summary_labels <- c(
+    "RMSE / full-data RMSE", "50% CI coverage",
+    switch(seesaw_metric,
+      error = "Seesaw error (%)",
+      retention = "Seesaw retention\n(est. / true)",
+      error_variability = c("Seesaw error (%)", "Year-to-year SD\n(est. / true)")
+    )
+  )
+  # Panels summarised across replicates by the median (the rest by the mean)
+  median_labels <- summary_labels[-(1:2)]
+
+  rep_summary <- m$metrics_rep |>
+    group_by(species) |>
+    mutate(rmse_ratio = rmse / mean(rmse[model == full_model])) |>
+    ungroup() |>
+    tidyr::pivot_longer(all_of(summary_levels), names_to = "metric") |>
+    tidyr::drop_na(value) |>
+    mutate(
+      model = factor(model, levels = rev(model_order)),
+      metric = factor(metric, levels = summary_levels, labels = summary_labels)
+    )
+
+  species_summary <- rep_summary |>
+    group_by(species, model, metric) |>
+    summarise(
+      value = if (first(metric) %in% median_labels) median(value) else mean(value),
+      .groups = "drop"
+    ) |>
+    mutate(beyond = FALSE)
+
+  if (seesaw_metric == "retention") {
+    # pooled slopes replace the per-replicate summaries for the third panel
+    species_summary <- species_summary |>
+      left_join(mutate(slopes, model = factor(model, levels = levels(species_summary$model))),
+        by = c("species", "model")
+      ) |>
+      mutate(value = if_else(metric == summary_labels[3], slope, value)) |>
+      select(-slope)
+  }
+
+  # Optionally cap the seesaw error panel: species beyond seesaw_max are pinned
+  # to it and drawn as triangles
+  if (!is.null(seesaw_max)) {
+    species_summary <- species_summary |>
+      mutate(
+        beyond = metric == summary_labels[3] & value > seesaw_max,
+        value = if_else(beyond, seesaw_max, value)
+      )
+  }
+
+  summary_nominal <- tibble::tibble(
+    metric = factor(summary_labels, levels = summary_labels),
+    value = c(1, 0.5, switch(seesaw_metric,
+      error = 0,
+      retention = 1,
+      error_variability = c(0, 1)
+    ))
+  )
+  # The no-seesaw floor of the seesaw error (dotted)
+  summary_floor <- if (seesaw_metric == "error_variability") {
+    tibble::tibble(metric = factor(summary_labels[3], levels = summary_labels), value = no_seesaw_error)
+  } else {
+    tibble::tibble(metric = factor(character(0), levels = summary_labels), value = numeric(0))
+  }
+
+  # Zoom each panel to the widest 10-90% quantile range of the replicates
+  # across models, extended to keep the species points and nominal values in
+  # view. oob_keep so the violins are still computed from all replicates (as
+  # with coord_cartesian(), which can't be set per panel).
+  summary_limits <- bind_rows(
+    rep_summary |>
+      group_by(metric, model) |>
+      summarise(lo = quantile(value, 0.1), hi = quantile(value, 0.9), .groups = "drop"),
+    rename(species_summary, lo = value) |> mutate(hi = lo),
+    rename(summary_nominal, lo = value) |> mutate(hi = lo),
+    rename(summary_floor, lo = value) |> mutate(hi = lo)
+  ) |>
+    group_by(metric) |>
+    summarise(lo = min(lo), hi = max(hi)) |>
+    arrange(metric)
+  if (!is.null(seesaw_max)) {
+    summary_limits$hi[3] <- seesaw_max
+  }
+  # Extra room on the right of the RMSE panel (a fraction of its range), e.g.
+  # for an inset legend
+  summary_limits$hi[1] <- summary_limits$hi[1] + rmse_pad * diff(unlist(summary_limits[1, c("lo", "hi")]))
+  # The variability ratio is on a log scale (too smooth and too wiggly by the
+  # same factor are equally far from 1)
+  log_x <- summary_limits$metric %in% summary_labels[summary_levels == "variability"]
+  summary_x_scales <- purrr::pmap(
+    list(summary_limits$lo, summary_limits$hi, log_x),
+    \(lo, hi, log_x) {
+      if (log_x) {
+        scale_x_log10(limits = c(lo, hi), oob = scales::oob_keep)
+      } else {
+        scale_x_continuous(limits = c(lo, hi), oob = scales::oob_keep)
+      }
+    }
+  )
+
+  ggplot(species_summary, aes(value, model)) +
+    geom_violin(data = rep_summary, fill = "grey92", colour = NA, scale = "width") +
+    geom_vline(aes(xintercept = value), data = summary_nominal, linetype = 2, colour = "grey50") +
+    geom_vline(aes(xintercept = value), data = summary_floor, linetype = 3, colour = "grey50") +
+    geom_point(aes(colour = species, shape = beyond), position = position_jitter(height = 0.15, seed = 1)) +
+    # medians on top
+    stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
+    scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 17), guide = "none") +
+    facet_wrap(~metric, nrow = 1, scales = "free_x") +
+    ggh4x::facetted_pos_scales(x = summary_x_scales) +
+    # Paired has 12 colours (Dark2 has only 8)
+    scale_colour_brewer(palette = "Paired", labels = tools::toTitleCase) +
+    labs(x = NULL, y = NULL, colour = NULL) +
+    theme(legend.position = "bottom", plot.margin = margin(5.5, 12, 5.5, 5.5), panel.spacing.x = unit(1, "lines")) +
+    guides(colour = guide_legend(nrow = 2))
+}
+
 # The three self-test figures: <fig_prefix>.pdf (all metrics by species),
 # -summary.pdf (across species), and -indexes.pdf (first three replicates);
 # fig_prefix is a full path without the extension
@@ -736,69 +923,7 @@ plot_self_test <- function(m, full_model, window, fig_prefix, caption) {
     width = 18, height = 1 + 2.2 * length(unique(m$metrics_rep$species))
   )
 
-  # Summary across species: one point per species, each a summary across
-  # replicates, scaled so species are comparable; violins show all replicates
-  # pooled across species. RMSE is relative to the species' mean full-data
-  # operating model RMSE (how much is lost by sampling one half per occasion).
-  # The seesaw error is signed and relative to the true index in the same
-  # replicate (spurious seesaw from the model, not from the simulated
-  # population); see self_test_metrics().
-  summary_levels <- c("rmse_ratio", "coverage_50", "seesaw_error")
-  summary_labels <- c("RMSE / full-data RMSE", "50% CI coverage", "Seesaw error (%),\nricher-region occasions")
-
-  rep_summary <- m$metrics_rep |>
-    group_by(species) |>
-    mutate(rmse_ratio = rmse / mean(rmse[model == full_model])) |>
-    ungroup() |>
-    tidyr::pivot_longer(all_of(summary_levels), names_to = "metric") |>
-    mutate(
-      model = factor(model, levels = rev(model_order)),
-      metric = factor(metric, levels = summary_levels, labels = summary_labels)
-    )
-
-  species_summary <- rep_summary |>
-    group_by(species, model, metric) |>
-    summarise(
-      value = if (first(metric) == summary_labels[3]) median(value) else mean(value),
-      .groups = "drop"
-    )
-
-  summary_nominal <- tibble::tibble(
-    metric = factor(summary_labels, levels = summary_labels),
-    value = c(1, 0.5, 0)
-  )
-
-  # Zoom each panel to the widest 10-90% quantile range of the replicates
-  # across models, extended to keep the species points and nominal values in
-  # view. oob_keep so the violins are still computed from all replicates (as
-  # with coord_cartesian(), which can't be set per panel).
-  summary_limits <- bind_rows(
-    rep_summary |>
-      group_by(metric, model) |>
-      summarise(lo = quantile(value, 0.1), hi = quantile(value, 0.9), .groups = "drop"),
-    rename(species_summary, lo = value) |> mutate(hi = lo),
-    rename(summary_nominal, lo = value) |> mutate(hi = lo)
-  ) |>
-    group_by(metric) |>
-    summarise(lo = min(lo), hi = max(hi)) |>
-    arrange(metric)
-  summary_x_scales <- purrr::map2(
-    summary_limits$lo, summary_limits$hi,
-    \(lo, hi) scale_x_continuous(limits = c(lo, hi), oob = scales::oob_keep)
-  )
-
-  ggplot(species_summary, aes(value, model)) +
-    geom_violin(data = rep_summary, fill = "grey90", colour = NA, scale = "width") +
-    geom_vline(aes(xintercept = value), data = summary_nominal, linetype = 2, colour = "grey50") +
-    stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
-    geom_point(aes(colour = species), position = position_jitter(height = 0.15, seed = 1)) +
-    facet_wrap(~metric, nrow = 1, scales = "free_x") +
-    ggh4x::facetted_pos_scales(x = summary_x_scales) +
-    # Paired has 12 colours (Dark2 has only 8)
-    scale_colour_brewer(palette = "Paired", labels = tools::toTitleCase) +
-    labs(x = NULL, y = NULL, colour = NULL) +
-    theme(legend.position = "bottom", plot.margin = margin(5.5, 12, 5.5, 5.5)) +
-    guides(colour = guide_legend(nrow = 2))
+  plot_self_test_summary(m, full_model, window = window)
   ggsave(paste0(fig_prefix, "-summary.pdf"), width = 9, height = 4)
 
   m$compared |>

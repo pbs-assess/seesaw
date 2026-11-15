@@ -10,6 +10,10 @@
 #   conditional_flat: conditional with each region's (HS, QCS) mean shifted to
 #     the overall mean: the real within-region pattern without the HS / QCS
 #     contrast
+#   conditional_flat_density: conditional_flat with the 2nd delta component
+#     shifted again so each region's mean density from omega (not mean log
+#     density) is equal: no HS / QCS contrast in biomass per area. Leaves a
+#     mean log contrast from differences in within-region variance
 #   new_contrast: new with each region's mean shifted to that of the paired
 #     conditional draw: the real HS / QCS contrast with a random within-region
 #     pattern
@@ -23,8 +27,9 @@
 #
 # The pipeline is in analysis/self-test-funcs.R. Everything is cached per
 # replicate, so n_reps can be raised later and only the new replicates are
-# run. All four omega types are always simulated (it's cheap), so adding one
-# to omega_types later only runs its fits.
+# run. All omega types are always simulated (it's cheap), so adding one to
+# omega_types later only runs its fits (but sims cached before
+# conditional_flat_density was added don't have it).
 
 source(here::here("analysis/self-test-funcs.R"))
 theme_set(ggsidekick::theme_sleek())
@@ -46,20 +51,24 @@ species_to_fit <- c(
   "shortspine thornyhead"
 )
 n_reps <- 50L
-# Quick check: fewer species and replicates, cached and plotted separately
-test_run <- FALSE
-if (test_run) {
-  species_to_fit <- c("pacific ocean perch", "pacific halibut", "pacific spiny dogfish", "dover sole")
-  n_reps <- 10L
-}
-out_suffix <- if (test_run) "-test" else ""
 # Species for the example omega maps (must be in species_to_fit)
 map_species <- "pacific halibut"
-n_workers <- max(1L, min(60L, future::availableCores() - 2L))
+n_workers <- max(1L, min(60L, future::availableCores() %/% 2L))
 # Omega types to fit: any subset of "conditional", "conditional_flat",
-# "new_contrast", "new" (the random-pattern pair is the 2 x 2 check; see the
-# header)
+# "conditional_flat_density", "new_contrast", "new" (the random-pattern pair
+# is the 2 x 2 check; see the header)
 omega_types <- c("conditional", "conditional_flat")
+# Quick check: fewer species and replicates, cached and plotted separately.
+# Here, the density-scale flattening for the species with the largest density
+# contrast left after the log-scale flattening
+test_run <- TRUE
+if (test_run) {
+  species_to_fit <- c("arrowtooth flounder", "pacific ocean perch", "shortspine thornyhead")
+  n_reps <- 20L
+  map_species <- "shortspine thornyhead"
+  omega_types <- c("conditional", "conditional_flat", "conditional_flat_density")
+}
+out_suffix <- if (test_run) "-test-density" else ""
 # As in 08: with 11 occasions, 8 gives 4 windows
 seesaw_window <- 8L
 
@@ -72,37 +81,7 @@ est_model <- "IID RF, factor(year)"
 
 # Omega types -------------------------------------------------------------------
 
-# Shift omega (one delta component, at the mesh nodes) so each region's
-# area-weighted mean on the grid moves exactly to a target. Nodes take the
-# region of their nearest grid cell and each region's nodes get one shift; the
-# projection mixes the two shifts across the HS / QCS boundary, so they're
-# solved from the 2 x 2 system of how each moves both region means.
-#
-# This equalizes mean log density (omega), not mean density: with different
-# within-region variances, a density contrast can remain after flattening
-# (rep_truth()'s contrast_density)
-make_region_shifter <- function(mesh, grid) {
-  xy <- as.matrix(grid[, c("X", "Y")])
-  A <- fmesher::fm_basis(mesh$mesh, loc = xy)
-  node_hs <- grid$hs[RANN::nn2(xy, mesh$mesh$loc[, 1:2], k = 1)$nn.idx[, 1]]
-  region_area <- c(sum(grid$area[grid$hs == 0L]), sum(grid$area[grid$hs == 1L]))
-  # rows: QCS, HS
-  W <- rbind(
-    (grid$hs == 0L) * grid$area / region_area[1],
-    (grid$hs == 1L) * grid$area / region_area[2]
-  )
-  WA <- as.matrix(W %*% A)
-  means <- \(omega) as.vector(WA %*% omega)
-  # nodes x regions (QCS, HS) indicator; region means move by M %*% shifts
-  D <- cbind(node_hs == 0L, node_hs == 1L) * 1
-  M <- WA %*% D
-  list(
-    project = \(omega) as.vector(A %*% omega),
-    means = means,
-    overall = \(omega) sum(means(omega) * region_area) / sum(region_area),
-    shift = \(omega, target) omega + as.vector(D %*% solve(M, target - means(omega)))
-  )
-}
+source(here::here("analysis/omega-swap-funcs.R"))
 
 # The four omega types' parameter vectors for one replicate, all from the same
 # draw (see the header)
@@ -129,7 +108,16 @@ omega_draws <- function(setup, sampler, rep) {
     pars_flat[j, ] <- setup$shifter$shift(omega_j, rep(setup$shifter$overall(omega_j), 2L))
     pars_new_contrast[j, ] <- setup$shifter$shift(pars_new[j, 1L], setup$shifter$means(omega_j))
   }
-  list(conditional = pars, conditional_flat = pars_flat, new_contrast = pars_new_contrast, new = pars_new)
+  # Flat, then the 2nd component (or the only one) shifted so the biomass
+  # contrast from omega is also zero
+  pars_flat_density <- pars_flat
+  j2 <- setup$omega_idx[[length(setup$omega_idx)]]
+  base <- Reduce(`+`, lapply(setup$omega_idx[-length(setup$omega_idx)], \(j) setup$shifter$project(pars_flat[j, 1L])), 0)
+  pars_flat_density[j2, ] <- setup$shifter$shift_density(pars_flat[j2, 1L], base)
+  list(
+    conditional = pars, conditional_flat = pars_flat, conditional_flat_density = pars_flat_density,
+    new_contrast = pars_new_contrast, new = pars_new
+  )
 }
 
 # Run ------------------------------------------------------------------------
@@ -270,6 +258,8 @@ metrics <- metrics_rep |>
 # (on the log scale for the signed error, so effects are symmetric)
 comparisons <- list(
   fitted_minus_flat = c("conditional", "conditional_flat"),
+  fitted_minus_flat_density = c("conditional", "conditional_flat_density"),
+  flat_density_minus_flat = c("conditional_flat_density", "conditional_flat"),
   fitted_minus_new = c("conditional", "new"),
   new_contrast_minus_new = c("new_contrast", "new")
 ) |>
@@ -311,6 +301,7 @@ print(paired, n = Inf)
 omega_labels <- c(
   conditional = "Fitted",
   conditional_flat = "Fitted, contrast removed",
+  conditional_flat_density = "Fitted, density contrast removed",
   new_contrast = "New, fitted contrast added",
   new = "New"
 )
@@ -364,7 +355,7 @@ metrics_rep |>
   geom_hline(yintercept = 0, linetype = 2, colour = "grey60") +
   geom_vline(xintercept = 0, linetype = 2, colour = "grey60") +
   geom_point() +
-  scale_colour_manual(values = setNames(c("black", "#E69F00", "#56B4E9", "grey60"), omega_labels)) +
+  scale_colour_manual(values = setNames(c("black", "#E69F00", "#CC79A7", "#56B4E9", "grey60"), omega_labels)) +
   scale_y_continuous(breaks = log(ratio_breaks), labels = ratio_labels) +
   facet_wrap(~species, nrow = 1, labeller = species_labeller, scales = "free_y") +
   labs(

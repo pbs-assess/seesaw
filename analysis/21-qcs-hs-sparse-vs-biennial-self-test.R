@@ -72,7 +72,11 @@ sparse_levels <- paste0(sparse_models, " (sparse annual)")
 alternating_levels <- paste0(alternating_models, " (alternating)")
 alternating_level <- paste0(alternating_model, " (alternating)")
 full_level <- paste0(full_model, " (full data)")
-overlap_levels <- paste0(rep(overlap_models, times = length(overlap_pct)), " (overlap ", rep(overlap_pct, each = length(overlap_models)), "%)")
+# Larger overlap first
+overlap_levels <- paste0(
+  rep(overlap_models, times = length(overlap_pct)), " (overlap ",
+  rep(sort(overlap_pct, decreasing = TRUE), each = length(overlap_models)), "%)"
+)
 design_levels <- c(full_level, sparse_levels, overlap_levels, alternating_levels)
 
 # Run ------------------------------------------------------------------------
@@ -155,16 +159,50 @@ metrics_rep |>
 
 # Plots ----------------------------------------------------------------------
 
+# The absolute seesaw error, |estimated - true beta| as a percentage, and the
+# year-to-year variability ratio, SD(diff(log est)) / SD(diff(log true)): above
+# 1, the index is wigglier than the truth (differencing weights the period-2
+# seesaw most); below 1, it is oversmoothed. As in plot_self_test_summary()
+beta <- compared |>
+  arrange(species, rep, design, year) |>
+  group_by(species, rep, design) |>
+  summarise(
+    beta_est = mean(seesaw_beta(est, phase, year, seesaw_window)),
+    beta_true = mean(seesaw_beta(true_est, phase, year, seesaw_window)),
+    variability = sd(diff(log(est))) / sd(diff(log(true_est))),
+    .groups = "drop"
+  )
+metrics_rep <- metrics_rep |>
+  left_join(beta, by = c("species", "rep", "design")) |>
+  mutate(seesaw_abs_error = 100 * (exp(abs(beta_est - beta_true)) - 1)) |>
+  # RMSE relative to the species' mean full-data RMSE, as in
+  # plot_self_test_summary()
+  mutate(rmse_ratio = rmse / mean(rmse[design == full_level]), .by = species)
+# The seesaw error from estimating no seesaw at all (the median true |beta|),
+# the floor for a model that smooths the seesaw away; beta_true is the same
+# across designs within a replicate
+no_seesaw_error <- beta |>
+  distinct(species, rep, beta_true) |>
+  summarise(value = 100 * (exp(median(abs(beta_true))) - 1)) |>
+  pull(value)
+
 metric_labels <- c(
-  rmse = "RMSE (log)", coverage_50 = "50% CI coverage", A = "Seesaw A (%)",
+  rmse = "RMSE (log index)", rmse_ratio = "RMSE / full-data RMSE", coverage_50 = "50% CI coverage", A = "Seesaw A (%)",
   A_max = paste0("Max A, ", seesaw_window, "-survey windows (%)"),
-  seesaw_error = "Seesaw error (%)"
+  seesaw_error = "Signed seesaw error (%)",
+  seesaw_abs_error = "Seesaw error (%)",
+  variability = "Year-to-year SD\n(est. / true)"
 )
+# Summarised across replicates by the median (the rest by the mean)
+median_labels <- metric_labels[c("seesaw_error", "seesaw_abs_error", "variability")]
 # Nominal values; for A and max A, the median of the true index by species
 nominal <- bind_rows(
   tidyr::expand_grid(
     species = unique(metrics_rep$species),
-    tibble::tibble(metric = c("coverage_50", "seesaw_error"), value = c(0.5, 0))
+    tibble::tibble(
+      metric = c("rmse_ratio", "coverage_50", "seesaw_error", "seesaw_abs_error", "variability"),
+      value = c(1, 0.5, 0, 0, 1)
+    )
   ),
   m$A_truth |>
     group_by(species) |>
@@ -180,14 +218,15 @@ rep_long <- metrics_rep |>
 # Summary across species (the signed seesaw error is estimated minus true
 # seesaw, positive when the index reads high in occasions the richer region is
 # sampled; see self_test_metrics()). One point per species (mean across
-# replicates; median for the seesaw error), connected between designs, over the
-# violins of all replicates pooled across species.
+# replicates; median for the seesaw metrics), connected between designs, over
+# the violins of all replicates pooled across species. The seesaw error has a
+# dotted line at the no-seesaw floor; the variability ratio is on a log scale.
 #
 # With split = TRUE, rows are the year model (RW year, factor(year)); the full
 # data fit is shown in both rows
 split_year_model <- function(d) {
   full <- filter(d, design == full_level)
-  design_short <- c("full data", "sparse annual", "overlap 10%", "overlap 25%", "alternating")
+  design_short <- c("Full data", "Sparse annual", "Overlap 25%", "Overlap 10%", "Alternating")
   bind_rows(
     filter(d, design != full_level) |>
       mutate(year_model = if_else(grepl("RW year", design), "RW year", "factor(year)")),
@@ -196,7 +235,7 @@ split_year_model <- function(d) {
   ) |>
     mutate(
       design = factor(
-        if_else(design == full_level, "full data", sub(".*\\((.*)\\)$", "\\1", design)),
+        if_else(design == full_level, "Full data", sub(".*\\((.*)\\)$", "\\1", design)) |> stringr::str_to_sentence(),
         levels = design_short
       ),
       year_model = factor(year_model, levels = c("factor(year)", "RW year"))
@@ -211,35 +250,55 @@ plot_summary <- function(metric_names, file, width, height, split = FALSE) {
   if (split) rep_summary <- split_year_model(rep_summary)
   species_long <- rep_summary |>
     summarise(
-      value = if_else(first(metric) == metric_labels[["seesaw_error"]], median(value), mean(value)),
+      value = if (first(metric) %in% median_labels) median(value) else mean(value),
       .by = all_of(c("species", "design", "metric", if (split) "year_model"))
     ) |>
     # geom_path joins points in row order
     arrange(species, metric, design)
 
+  # Crop each x-axis 10% (of the value) beyond the smallest and largest species means
+  x_lim <- species_long |>
+    summarise(lo = min(value) - 0.1 * abs(min(value)), hi = max(value) + 0.1 * abs(max(value)), .by = metric) |>
+    arrange(metric)
+  x_scales <- Map(
+    \(lo, hi, metric) {
+      if (metric == metric_labels[["variability"]]) {
+        scale_x_log10(limits = c(lo, hi), oob = scales::oob_keep)
+      } else {
+        scale_x_continuous(limits = c(lo, hi), oob = scales::oob_keep)
+      }
+    },
+    x_lim$lo, x_lim$hi, as.character(x_lim$metric)
+  )
+  summary_floor <- tibble::tibble(metric = metric_labels[["seesaw_abs_error"]], value = no_seesaw_error) |>
+    filter(metric %in% summary_metrics) |>
+    mutate(metric = factor(metric, levels = metric_labels))
+
   ggplot(species_long, aes(value, design)) +
-    geom_violin(data = rep_summary, fill = "grey90", colour = NA, scale = "width") +
+    geom_violin(data = rep_summary, fill = "grey92", colour = NA, scale = "width") +
     geom_vline(aes(xintercept = value), data = summary_nominal, linetype = 2, colour = "grey50") +
-    stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
-    geom_path(aes(colour = species, group = species)) +
+    geom_vline(aes(xintercept = value), data = summary_floor, linetype = 3, colour = "grey50") +
+    geom_path(aes(colour = species, group = species), data = \(d) filter(d, metric != metric_labels[["seesaw_error"]])) +
     geom_point(aes(colour = species)) +
+    # medians on top
+    stat_summary(fun = median, geom = "crossbar", fun.min = median, fun.max = median, width = 0.6) +
     (if (split) facet_grid(year_model ~ metric, scales = "free_x") else facet_wrap(~metric, nrow = 1, scales = "free_x")) +
+    ggh4x::facetted_pos_scales(x = x_scales) +
     scale_colour_brewer(palette = "Paired", labels = tools::toTitleCase) +
     # first design at the top
     scale_y_discrete(limits = rev) +
     labs(x = NULL, y = NULL, colour = NULL) +
-    theme(legend.position = "bottom") +
+    theme(
+      legend.position = "bottom", panel.grid.major = element_line(colour = "grey90", linewidth = rel(0.5)),
+      panel.spacing.x = unit(1, "lines")
+    ) +
     guides(colour = guide_legend(nrow = 2))
   ggsave(here::here(file), width = width, height = height)
 }
+# Coverage is left out; with this many designs it is cluttered and uninformative
 plot_summary(
-  c("rmse", "coverage_50", "seesaw_error"),
-  "figs/qcs-hs-sparse-vs-biennial-self-test-summary.pdf", width = 12, height = 5
-)
-# Without coverage, for the many designs
-plot_summary(
-  c("rmse", "seesaw_error"),
-  "figs/qcs-hs-sparse-vs-biennial-self-test-summary-no-coverage.pdf", width = 9, height = 7,
+  c("rmse_ratio", "seesaw_abs_error", "variability"),
+  "figs/qcs-hs-sparse-vs-biennial-self-test-summary-no-coverage.pdf", width = 8.1, height = 4.5,
   split = TRUE
 )
 
@@ -253,7 +312,7 @@ ggplot(rep_long, aes(value, design)) +
   labs(x = NULL, y = NULL)
 ggsave(
   here::here("figs/qcs-hs-sparse-vs-biennial-self-test.pdf"),
-  width = 14, height = 1 + 1.6 * length(unique(rep_long$species))
+  width = 18, height = 1 + 1.6 * length(unique(rep_long$species))
 )
 
 # Indexes of the first three replicates
