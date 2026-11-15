@@ -30,7 +30,7 @@ nwfsc_species <- c(
 n_reps <- 20L
 grid_res_km <- 6 # coarsened from 2 km to cut prediction cost
 index_nsplit <- 4L # to limit peak memory per worker
-mesh_cutoff <- 20 # ~400 nodes (15 gave ~600)
+mesh_cutoff <- 15 # ~600 nodes
 # Peak memory was ~3.5 GB per worker with mesh_cutoff = 15, so lower this if
 # the machine has less than ~3.5 GB x workers of RAM
 n_workers <- max(1L, min(60L, parallelly::availableCores() - 2L))

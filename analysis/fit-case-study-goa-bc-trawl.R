@@ -33,7 +33,9 @@ fit_goa_bc_trawl <- function(species) {
     add_utm_columns(c("lon", "lat"), utm_crs = 3156) |>
     mutate(survey_group = "pbs") |> # index at the PBS catchability
     replicate_df("year", sort(unique(dat$year)))
-  mesh <- make_mesh(dat, c("X", "Y"), cutoff = 40)
+  # coarser than the BC-only fits (10 km) for the much larger domain; 20 km
+  # keeps ~200 nodes over BC (40 km gave ~80)
+  mesh <- make_mesh(dat, c("X", "Y"), cutoff = 20)
 
   fit_index_models(
     data = dat, grid = grid, mesh = mesh,
