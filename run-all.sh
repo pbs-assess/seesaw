@@ -6,7 +6,8 @@
 # ./run-all.sh --diagnostics also the non-paper index diagnostics (diagnostics/)
 #
 # Progress is in logs/run-all.log
-# each script's output is in logs/<script>.log. 
+# each script's output is in logs/<script>.log, and each fit's progress (a line
+# per species, model, or task as it finishes) in logs/<cache name>-progress.log.
 # Package versions are written to session-info.txt
 #
 # Fits are slow (hours to days in total; the self-tests most of all).

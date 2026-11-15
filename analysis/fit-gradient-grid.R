@@ -15,21 +15,35 @@ tasks <- expand_grid(delta = gradient_deltas, sigma_O = gradient_sigma_Os, seed 
     cache_dir, sprintf("delta-%s__sigma-O-%s__seed-%03d.rds", delta, sigma_O, seed)
   ))
 todo <- filter(tasks, !file.exists(cache_file))
+log_file <- progress_log("gradient-grid")
 
 if (nrow(todo) > 0L) {
-  future::plan(future::multisession, workers = max(1L, min(60L, parallelly::availableCores() - 2L)))
+  n_workers <- max(1L, min(60L, parallelly::availableCores() - 2L))
+  log_progress(log_file, "=== run started: ", nrow(todo), " of ", nrow(tasks), " tasks to run, ", n_workers, " workers ===")
+  future::plan(future::multisession, workers = n_workers)
   furrr::future_pwalk(
     todo,
     \(delta, sigma_O, seed, cache_file) {
+      set_worker_log(log_file, sprintf("delta = %s, sigma_O = %s, seed = %d", delta, sigma_O, seed))
+      tic()
       out <- tryCatch(run_gradient_task(delta, sigma_O, seed), error = \(e) {
-        message("Task delta = ", delta, ", sigma_O = ", sigma_O, ", seed = ", seed, " errored: ", conditionMessage(e))
+        log_worker("ERROR: ", conditionMessage(e))
         NULL
       })
-      if (!is.null(out)) saveRDS(out, cache_file)
+      secs <- toc_secs()
+      if (!is.null(out)) {
+        saveRDS(out, cache_file)
+        n_done <- sum(file.exists(tasks$cache_file))
+        log_worker(
+          "done, ", n_distinct(out$model), "/", length(gradient_models), " models ok [", fmt_secs(secs), "] (",
+          n_done, "/", nrow(tasks), " tasks done)"
+        )
+      }
     },
     .options = furrr_opts(scheduling = Inf)
   )
   future::plan(future::sequential)
+  log_progress(log_file, "=== run finished ===")
 }
 
 done <- file.exists(tasks$cache_file)

@@ -79,6 +79,7 @@ fit_bc_longline <- function(species) {
   converged <- compact(lapply(candidates, \(f) fit_ok(f)))
   pool <- if (length(converged) > 0L) converged else candidates
   family_name <- names(pool)[which.min(map_dbl(pool, AIC))]
+  log_worker("family ", family_name)
 
   do.call(fit_index_models, c(list(grid = grid, family = families[[family_name]]), fit_args)) |>
     left_join(hbll_phase, by = "year") |>

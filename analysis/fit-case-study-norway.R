@@ -50,7 +50,8 @@ fit_norway <- function(species) {
     alternating = list(dat = dat_alt, mesh = mesh_alt),
     all = list(dat = dat_all, mesh = mesh_all)
   )
-  map(designs, \(x) {
+  imap(designs, \(x, design) {
+    set_worker_log(label = paste0(species, " [", design, "]"))
     fit_index_models(
       data = x$dat, mesh = x$mesh,
       grid = replicate_df(grid0, "year", sort(unique(x$dat$year))),

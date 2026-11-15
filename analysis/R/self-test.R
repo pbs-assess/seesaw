@@ -169,10 +169,6 @@ simulate_rep <- function(setup, sampler, rep) {
 
 minutes_since <- \(t0) round(as.numeric(difftime(Sys.time(), t0, units = "mins")), 1)
 
-log_progress <- function(log_file, ...) {
-  cat(format(Sys.time(), "%Y-%m-%d %H:%M:%S "), ..., "\n", sep = "", file = log_file, append = TRUE)
-}
-
 # expr returns a note for the log or NULL. Errors are logged, not raised, so
 # the other tasks continue.
 run_logged <- function(log_file, label, expr) {
@@ -261,7 +257,7 @@ run_self_test <- function(dir, species, n_reps, prepare_data, setup_species, fit
   fit_file <- \(s, rep, design, model) {
     file.path(dir, "fits", sprintf("%s-rep%03d-%s-%s.rds", slug(s), rep, design, slug(model)))
   }
-  log_file <- file.path(dir, "progress.log")
+  log_file <- progress_log(basename(dir))
 
   future::plan(future::multisession, workers = n_workers)
   on.exit(future::plan(future::sequential), add = TRUE)

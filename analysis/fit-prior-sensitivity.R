@@ -61,9 +61,13 @@ if (!file.exists(out_file)) {
   )
 
   single_thread()
-  future::plan(future::multisession, workers = min(length(jobs), parallelly::availableCores() / 2))
+  log_file <- progress_log("prior-sensitivity")
+  n_workers <- min(length(jobs), parallelly::availableCores() / 2)
+  log_progress(log_file, "=== run started: ", length(jobs), " fits, ", n_workers, " workers ===")
+  future::plan(future::multisession, workers = n_workers)
   res <- furrr::future_imap(jobs, \(prior, name) {
     single_thread()
+    set_worker_log(log_file, name)
     tic()
     fit <- tryCatch(
       if (name == "reference") {
@@ -75,9 +79,13 @@ if (!file.exists(out_file)) {
     )
     # before summarise_fit(): an argument would be evaluated lazily, after its tic()
     fit_time <- toc_secs()
-    summarise_fit(fit, fit_time)
+    out <- summarise_fit(fit, fit_time)
+    status <- if (inherits(fit, "error")) paste("ERROR:", conditionMessage(fit)) else if (out$sanity_ok) "ok" else "failed sanity"
+    log_worker("done, ", status, " [fit ", fmt_secs(fit_time), "]")
+    out
   }, .options = furrr_opts(scheduling = Inf))
   future::plan(future::sequential)
+  log_progress(log_file, "=== run finished ===")
 
   stopifnot(res$reference$sanity_ok)
   fit_info <- tibble(prior = names(res)[-1], sanity_ok = map_lgl(res[-1], "sanity_ok")) |>

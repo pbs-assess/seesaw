@@ -91,20 +91,51 @@ index_ok <- function(fit, model, grid, nsplit = 2L) {
 
 # Seconds since the matching tic()
 toc_secs <- \() { t <- toc(quiet = TRUE); unname(t$toc - t$tic) }
+fmt_secs <- \(s) if (s < 120) sprintf("%.0f s", s) else sprintf("%.1f min", s / 60)
+
+# Progress logs -----------------------------------------------------------------
+
+# Workers append to the log directly, so lines appear as work finishes (furrr
+# would relay messages only when a future is collected). Lines this short are
+# written whole, so parallel workers don't garble each other.
+progress_log <- function(name) {
+  dir.create(here::here("logs"), showWarnings = FALSE)
+  here::here("logs", paste0(name, "-progress.log"))
+}
+
+log_progress <- function(log_file, ...) {
+  cat(format(Sys.time(), "%Y-%m-%d %H:%M:%S "), ..., "\n", sep = "", file = log_file, append = TRUE)
+}
+
+# Set in a worker so that log_worker() (e.g., in timed_index()) writes to
+# `file`, prefixed by `label`. Unset, log_worker() does nothing.
+set_worker_log <- function(file = getOption("seesaw.log_file"), label) {
+  options(seesaw.log_file = file, seesaw.log_label = label)
+}
+log_worker <- function(...) {
+  f <- getOption("seesaw.log_file")
+  if (!is.null(f)) log_progress(f, getOption("seesaw.log_label"), ": ", ...)
+}
+
+# Fitting --------------------------------------------------------------------------
 
 # index_ok(fit_ok(fit_expr)) with the wall time (seconds) of each step as the
 # columns fit_time (fit plus sanity checks) and index_time. fit_expr is
 # evaluated lazily, inside the timing. A failed fit has no rows, so its time
-# isn't recorded.
+# isn't recorded (it is logged).
 timed_index <- function(fit_expr, model, grid, nsplit = 2L) {
   tic()
   fit <- fit_ok(fit_expr)
   fit_time <- toc_secs()
   tic()
   index <- index_ok(fit, model, grid, nsplit = nsplit)
-  if (!is.null(index)) {
+  index_time <- toc_secs()
+  if (is.null(index)) {
+    log_worker(model, " FAILED [fit ", fmt_secs(fit_time), "]")
+  } else {
     index$fit_time <- fit_time
-    index$index_time <- toc_secs()
+    index$index_time <- index_time
+    log_worker(model, " ok [fit ", fmt_secs(fit_time), ", index ", fmt_secs(index_time), "]")
   }
   index
 }
@@ -133,16 +164,33 @@ run_case_study <- function(species, fit_species, file, n_workers, designs = NULL
   dir.create(species_dir, showWarnings = FALSE, recursive = TRUE)
   species_file <- \(s) file.path(species_dir, paste0(slug(s), ".rds"))
   stopifnot(!anyDuplicated(species_file(species)))
+  log_file <- progress_log(basename(species_dir))
+  n_cached <- sum(file.exists(species_file(species)))
+  log_progress(
+    log_file, "=== run started: ", length(species), " species (", n_cached, " cached), ", n_workers, " workers ==="
+  )
   single_thread()
   future::plan(future::multisession, workers = n_workers)
   on.exit(future::plan(future::sequential), add = TRUE)
   res <- furrr::future_map(set_names(species), \(s) {
     f <- species_file(s)
     if (file.exists(f)) return(readRDS(f))
+    set_worker_log(log_file, s)
+    log_worker("started")
+    tic()
     out <- tryCatch(fit_species(s), error = \(e) structure(conditionMessage(e), class = "species_error"))
-    if (!inherits(out, "species_error")) saveRDS(out, f)
+    secs <- toc_secs()
+    if (inherits(out, "species_error")) {
+      log_worker("ERROR: ", out)
+    } else {
+      saveRDS(out, f)
+      n_done <- sum(file.exists(species_file(species)))
+      what <- if (is.null(out)) "skipped" else paste(n_distinct(out[intersect(c("design", "model"), names(out))]), "fits ok")
+      log_worker("done, ", what, " [", fmt_secs(secs), "] (", n_done, "/", length(species), " species done)")
+    }
     out
   }, .options = furrr_opts())
+  log_progress(log_file, "=== run finished ===")
   errored <- keep(res, \(x) inherits(x, "species_error"))
   if (length(errored) > 0L) {
     cli::cli_warn("Fitting errored for {length(errored)} species")
