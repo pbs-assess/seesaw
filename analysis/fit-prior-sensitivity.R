@@ -31,7 +31,8 @@ if (!file.exists(out_file)) {
     )
   }
 
-  summarise_fit <- function(fit) {
+  # fit_time (fit only; sanity checks run below) and index_time are wall seconds
+  summarise_fit <- function(fit, fit_time) {
     if (inherits(fit, "error")) {
       return(list(sanity_ok = FALSE, index = NULL, sigma_V = NULL))
     }
@@ -44,9 +45,12 @@ if (!file.exists(out_file)) {
         std.error = as.numeric(as.list(fit$sd_report, "Std. Error", report = TRUE)$sigma_V)
       )
     }
+    tic()
+    index <- get_index_ok(fit, grid)
+    if (!is.null(index)) index <- mutate(index, fit_time = fit_time, index_time = toc_secs())
     list(
       sanity_ok = isTRUE(all(unlist(sanity(fit, gradient_thresh = 0.01, silent = TRUE)))),
-      index = get_index_ok(fit, grid),
+      index = index,
       sigma_V = sigma_V
     )
   }
@@ -60,6 +64,7 @@ if (!file.exists(out_file)) {
   future::plan(future::multisession, workers = min(length(jobs), parallelly::availableCores() / 2))
   res <- furrr::future_imap(jobs, \(prior, name) {
     single_thread()
+    tic()
     fit <- tryCatch(
       if (name == "reference") {
         fit_cod("IID RF, factor(year)", dat, mesh)
@@ -68,7 +73,9 @@ if (!file.exists(out_file)) {
       },
       error = \(e) e
     )
-    summarise_fit(fit)
+    # before summarise_fit(): an argument would be evaluated lazily, after its tic()
+    fit_time <- toc_secs()
+    summarise_fit(fit, fit_time)
   }, .options = furrr_opts(scheduling = Inf))
   future::plan(future::sequential)
 

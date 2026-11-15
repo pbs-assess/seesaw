@@ -2,9 +2,10 @@ library(dplyr, warn.conflicts = FALSE)
 library(tidyr)
 library(purrr)
 library(sdmTMB)
+library(tictoc)
 
 # Parallel workers need these attached too
-analysis_packages <- c("dplyr", "tidyr", "purrr", "sdmTMB")
+analysis_packages <- c("dplyr", "tidyr", "purrr", "sdmTMB", "tictoc")
 furrr_opts <- function(...) furrr::furrr_options(seed = TRUE, packages = analysis_packages, ...)
 
 # year = "none": any year-to-year change is carried by the spatiotemporal field
@@ -88,8 +89,28 @@ index_ok <- function(fit, model, grid, nsplit = 2L) {
   index
 }
 
+# Seconds since the matching tic()
+toc_secs <- \() { t <- toc(quiet = TRUE); unname(t$toc - t$tic) }
+
+# index_ok(fit_ok(fit_expr)) with the wall time (seconds) of each step as the
+# columns fit_time (fit plus sanity checks) and index_time. fit_expr is
+# evaluated lazily, inside the timing. A failed fit has no rows, so its time
+# isn't recorded.
+timed_index <- function(fit_expr, model, grid, nsplit = 2L) {
+  tic()
+  fit <- fit_ok(fit_expr)
+  fit_time <- toc_secs()
+  tic()
+  index <- index_ok(fit, model, grid, nsplit = nsplit)
+  if (!is.null(index)) {
+    index$fit_time <- fit_time
+    index$index_time <- toc_secs()
+  }
+  index
+}
+
 fit_index_models <- function(data, grid, mesh, models = names(paper_models), nsplit = 2L, ...) {
-  map(set_names(models), \(m) index_ok(fit_ok(fit_model(m, data = data, mesh = mesh, ...)), m, grid, nsplit)) |>
+  map(set_names(models), \(m) timed_index(fit_model(m, data = data, mesh = mesh, ...), m, grid, nsplit)) |>
     discard(is.null) |>
     bind_rows(.id = "model") |>
     # typed, so callers' mutate() and joins still work if every model fails
@@ -131,7 +152,8 @@ run_case_study <- function(species, fit_species, file, n_workers, designs = NULL
   indexes <- bind_rows(res, .id = "species") |>
     bind_rows(tibble(species = character(), model = character(), year = integer())) |>
     select(any_of(c(
-      "species", "design", "model", "family", "year", "est", "lwr", "upr", "log_est", "se", "phase", "st_collapsed"
+      "species", "design", "model", "family", "year", "est", "lwr", "upr", "log_est", "se", "phase", "st_collapsed",
+      "fit_time", "index_time"
     )))
   if (is.null(designs) && "design" %in% names(indexes)) designs <- unique(indexes$design)
   fitted <- species[species %in% c(names(res), names(errored))]

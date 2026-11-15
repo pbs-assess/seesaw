@@ -90,13 +90,23 @@ run_gradient_task <- function(delta, sigma_O, seed, return_fits = FALSE) {
   truth <- summarise(s, true_est = sum(mu), .by = year)
   d <- observe_alternating(s, seed)
   mesh <- make_square_mesh(d, max_edge = 0.05)
-  fits <- map(set_names(gradient_models), \(m) fit_ok(fit_gradient_model(m, d, mesh)))
-  indexes <- compact(fits) |>
-    map(\(f) tryCatch(get_index(f, newdata = gradient_grid, bias_correct = TRUE), error = \(e) NULL)) |>
-    compact() |>
+  # fit_time (fit plus sanity checks) and index_time are wall seconds
+  results <- map(set_names(gradient_models), \(m) {
+    tic()
+    fit <- fit_ok(fit_gradient_model(m, d, mesh))
+    fit_time <- toc_secs()
+    tic()
+    index <- if (!is.null(fit)) {
+      tryCatch(get_index(fit, newdata = gradient_grid, bias_correct = TRUE), error = \(e) NULL)
+    }
+    if (!is.null(index)) index <- mutate(index, fit_time = fit_time, index_time = toc_secs())
+    list(fit = fit, index = index)
+  })
+  fits <- map(results, "fit")
+  indexes <- compact(map(results, "index")) |>
     bind_rows(.id = "model") |>
     bind_rows(tibble(model = character(), year = integer())) |>
-    select(any_of(c("model", "year", "est", "lwr", "upr", "log_est", "se"))) |>
+    select(any_of(c("model", "year", "est", "lwr", "upr", "log_est", "se", "fit_time", "index_time"))) |>
     left_join(truth, by = "year") |>
     mutate(phase = gradient_phase(year), delta = delta, sigma_O = sigma_O, seed = seed, .before = 1L)
   if (return_fits) list(s = s, fits = fits, indexes = indexes) else indexes

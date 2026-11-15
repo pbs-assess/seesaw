@@ -54,7 +54,7 @@ run() {
   echo "$(date '+%F %T') done $1 (exit $?)" >> logs/run-all.log
 }
 
-Rscript -e 'pkgs <- c("sdmTMB", "TMB", "fmesher", "surveyjoin", "gfplot", "dplyr", "ggplot2", "patchwork", "ggh4x", "furrr", "future", "sf"); for (p in pkgs) library(p, character.only = TRUE); print(sessionInfo())' > session-info.txt 2>&1
+Rscript -e 'pkgs <- c("sdmTMB", "TMB", "fmesher", "surveyjoin", "gfplot", "dplyr", "ggplot2", "patchwork", "ggh4x", "furrr", "future", "sf", "tictoc"); for (p in pkgs) library(p, character.only = TRUE); print(sessionInfo())' > session-info.txt 2>&1
 
 if [ "$figs_only" = false ]; then
   for s in "${fits[@]}"; do run "$s"; done

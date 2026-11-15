@@ -109,7 +109,7 @@ fit_design <- function(setup, catch, design, model, rep, index_nsplit = 2L) {
     # same knots as the other designs
     mesh <- make_mesh(d, c("X", "Y"), mesh = setup$mesh$mesh)
   }
-  index <- index_ok(fit_ok(fit_self_test_model(model, d, mesh)), model, setup$grid, nsplit = index_nsplit)
+  index <- timed_index(fit_self_test_model(model, d, mesh), model, setup$grid, nsplit = index_nsplit)
   if (is.null(index)) tibble() else index
 }
 
@@ -356,7 +356,7 @@ run_self_test <- function(dir, species, n_reps, prepare_data, setup_species, fit
     list(done_indexes[ok], done$species[ok], done$rep[ok], done$design[ok], done$model[ok]),
     \(index, s, rep, design, model) mutate(index, species = s, rep = rep, design = design, model = model, .before = 1L)
   ) |>
-    select(species, rep, design, model, year, est, lwr, upr, log_est, se, any_of("st_collapsed")) |>
+    select(species, rep, design, model, year, est, lwr, upr, log_est, se, any_of(c("st_collapsed", "fit_time", "index_time"))) |>
     left_join(truth, by = c("species", "rep", "year")) |>
     left_join(occasions, by = c("species", "year"))
 
