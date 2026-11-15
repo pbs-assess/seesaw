@@ -43,7 +43,7 @@ fit_goa_bc_trawl <- function(species) {
     family = delta_gamma(type = "poisson-link"),
     offset = log(dat$effort),
     covariates = "factor(survey_group)",
-    nsplit = 5L # large grid
+    nsplit = 6L # large grid
   ) |>
     mutate(phase = goa_bc_trawl_phase(year))
 }
