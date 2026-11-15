@@ -88,5 +88,5 @@ fit_bc_longline <- function(species) {
 run_case_study(
   longline_species, fit_bc_longline,
   file = here::here("data-generated/case-study-bc-longline.rds"),
-  n_workers = min(length(longline_species), parallelly::availableCores())
+  n_workers = min(length(longline_species), 60L, parallelly::availableCores())
 )

@@ -17,7 +17,7 @@ tasks <- expand_grid(delta = gradient_deltas, sigma_O = gradient_sigma_Os, seed 
 todo <- filter(tasks, !file.exists(cache_file))
 
 if (nrow(todo) > 0L) {
-  future::plan(future::multisession, workers = max(1L, min(18L, parallelly::availableCores() - 2L)))
+  future::plan(future::multisession, workers = max(1L, min(60L, parallelly::availableCores() - 2L)))
   furrr::future_pwalk(
     todo,
     \(delta, sigma_O, seed, cache_file) {

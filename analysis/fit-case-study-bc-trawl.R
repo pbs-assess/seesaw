@@ -41,5 +41,5 @@ fit_bc_trawl <- function(species) {
 run_case_study(
   trawl_species, fit_bc_trawl,
   file = here::here("data-generated/case-study-bc-trawl.rds"),
-  n_workers = min(length(trawl_species), parallelly::availableCores() / 2)
+  n_workers = min(length(trawl_species), 60L, parallelly::availableCores())
 )
