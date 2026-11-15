@@ -90,7 +90,8 @@ overlap_keep <- function(setup, rep, p) {
 }
 
 # design: "full", "alternating", "sparse", or "overlapNN" (NN = percent of the
-# off region's tows). Returns an empty tibble if the fit fails.
+# off region's tows). Returns an empty tibble if the fit fails (see
+# index_ok()).
 fit_design <- function(setup, catch, design, model, rep, index_nsplit = 2L) {
   d <- setup$dat
   d$catch_weight <- catch
@@ -108,8 +109,7 @@ fit_design <- function(setup, catch, design, model, rep, index_nsplit = 2L) {
     # same knots as the other designs
     mesh <- make_mesh(d, c("X", "Y"), mesh = setup$mesh$mesh)
   }
-  fit <- fit_ok(fit_self_test_model(model, d, mesh))
-  index <- if (!is.null(fit)) get_index_ok(fit, setup$grid, nsplit = index_nsplit)
+  index <- index_ok(fit_ok(fit_self_test_model(model, d, mesh)), model, setup$grid, nsplit = index_nsplit)
   if (is.null(index)) tibble() else index
 }
 
@@ -167,7 +167,6 @@ simulate_rep <- function(setup, sampler, rep) {
 
 # Pipeline -------------------------------------------------------------------------
 
-slug <- \(x) gsub("^-|-$", "", gsub("[^a-z0-9]+", "-", tolower(x)))
 minutes_since <- \(t0) round(as.numeric(difftime(Sys.time(), t0, units = "mins")), 1)
 
 log_progress <- function(log_file, ...) {
@@ -206,22 +205,30 @@ setup_worker <- function(species, dat, file, setup_species, log_file) {
 
 # Workers read the setup (with its large operating-model fit) from disk rather
 # than being sent it: serializing a copy per task made the main session the
-# bottleneck and the simulations ran one at a time. Each worker keeps the
-# setups it has read.
-sim_setup_cache <- new.env()
-
-sim_worker <- function(species, setup_file, rep, file, log_file) {
+# bottleneck and the simulations ran one at a time. Each task runs a chunk of
+# one species' replicates so the setup is read and the sampler built once per
+# chunk; a cache kept on the worker wouldn't help, as each future gets a fresh
+# copy of its globals.
+sim_worker <- function(species, setup_file, reps, files, log_file) {
   single_thread()
-  run_logged(log_file, paste0("sim: ", species, " rep ", rep), {
-    if (is.null(sim_setup_cache[[species]])) {
+  loaded <- tryCatch(
+    {
       setup <- readRDS(setup_file)
       setup$fit_om <- sdmTMB:::reload_model(setup$fit_om)
-      sim_setup_cache[[species]] <- list(setup = setup, sampler = sdmTMB:::.posterior_re_sampler(setup$fit_om))
+      list(setup = setup, sampler = sdmTMB:::.posterior_re_sampler(setup$fit_om))
+    },
+    error = \(e) {
+      log_progress(log_file, "ERROR sim setup: ", species, ": ", conditionMessage(e))
+      NULL
     }
-    cached <- sim_setup_cache[[species]]
-    saveRDS(simulate_rep(cached$setup, cached$sampler, rep), file)
-    NULL
-  })
+  )
+  if (is.null(loaded)) return(invisible(NULL))
+  for (i in seq_along(reps)) {
+    run_logged(log_file, paste0("sim: ", species, " rep ", reps[i]), {
+      saveRDS(simulate_rep(loaded$setup, loaded$sampler, reps[i]), files[i])
+      NULL
+    })
+  }
 }
 
 fit_worker <- function(setup, catch, rep, design, model, file, index_nsplit, log_file) {
@@ -229,7 +236,7 @@ fit_worker <- function(setup, catch, rep, design, model, file, index_nsplit, log
   run_logged(log_file, paste0("fit: ", setup$species, " rep ", rep, " ", design, " ", model), {
     index <- fit_design(setup, catch, design, model, rep, index_nsplit)
     saveRDS(index, file)
-    if (nrow(index) == 0L) " FAILED SANITY"
+    if (nrow(index) == 0L) " FAILED"
   })
 }
 
@@ -243,8 +250,9 @@ fit_worker <- function(setup, catch, rep, design, model, file, index_nsplit, log
 # setup_species(species, dat) returns a sim_setup() list plus fit_om, or the
 # fit_operating_model() failure. `fits` has columns design and model.
 #
-# Returns list(indexes, fit_status); fit_status is "ok", "failed sanity", "fit
-# error", "sim error", or "om failed" for every requested fit.
+# Returns list(indexes, fit_status); fit_status is "ok", "failed" (sanity
+# checks, index, or a collapsed "RW RF"; see index_ok()), "fit error", "sim
+# error", or "om failed" for every requested fit.
 run_self_test <- function(dir, species, n_reps, prepare_data, setup_species, fits,
                           n_workers = 1L, index_nsplit = 2L) {
   for (d in file.path(dir, c("setups", "sims", "fits"))) dir.create(d, recursive = TRUE, showWarnings = FALSE)
@@ -282,8 +290,13 @@ run_self_test <- function(dir, species, n_reps, prepare_data, setup_species, fit
   todo <- filter(sims, !file.exists(file))
   if (nrow(todo) > 0L) {
     log_progress(log_file, nrow(todo), " simulations to run")
+    # enough chunks to keep every worker busy
+    n_chunks <- max(1L, ceiling(n_workers / n_distinct(todo$species)))
+    chunks <- todo |>
+      mutate(chunk = ceiling(row_number() * n_chunks / n()), .by = species) |>
+      summarise(reps = list(rep), files = list(file), .by = c(species, chunk))
     furrr::future_pwalk(
-      list(species = todo$species, setup_file = setup_file(todo$species), rep = todo$rep, file = todo$file),
+      list(species = chunks$species, setup_file = setup_file(chunks$species), reps = chunks$reps, files = chunks$files),
       sim_worker,
       log_file = log_file,
       .options = opts
@@ -319,7 +332,7 @@ run_self_test <- function(dir, species, n_reps, prepare_data, setup_species, fit
 
   done <- filter(fit_tasks, file.exists(file))
   done_indexes <- lapply(done$file, readRDS)
-  done$status <- if_else(map_int(done_indexes, nrow) > 0L, "ok", "failed sanity")
+  done$status <- if_else(map_int(done_indexes, nrow) > 0L, "ok", "failed")
   fit_status <- expand_grid(species = species, rep = seq_len(n_reps), fits) |>
     left_join(select(fit_tasks, species, rep, design, model, file), by = c("species", "rep", "design", "model")) |>
     left_join(select(done, file, done_status = status), by = "file") |>
@@ -343,7 +356,7 @@ run_self_test <- function(dir, species, n_reps, prepare_data, setup_species, fit
     list(done_indexes[ok], done$species[ok], done$rep[ok], done$design[ok], done$model[ok]),
     \(index, s, rep, design, model) mutate(index, species = s, rep = rep, design = design, model = model, .before = 1L)
   ) |>
-    select(species, rep, design, model, year, est, lwr, upr, log_est, se) |>
+    select(species, rep, design, model, year, est, lwr, upr, log_est, se, any_of("st_collapsed")) |>
     left_join(truth, by = c("species", "rep", "year")) |>
     left_join(occasions, by = c("species", "year"))
 

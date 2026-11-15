@@ -77,5 +77,6 @@ norway_species <- sets |>
 run_case_study(
   norway_species, fit_norway,
   file = here::here("data-generated/case-study-norway.rds"),
-  n_workers = min(length(norway_species), parallelly::availableCores() / 2)
+  n_workers = min(length(norway_species), parallelly::availableCores() / 2),
+  designs = c("alternating", "all")
 )

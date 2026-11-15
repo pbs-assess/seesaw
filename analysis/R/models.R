@@ -74,30 +74,76 @@ get_index_ok <- function(fit, grid, nsplit = 2L) {
   )
 }
 
+# With collapse_spatial_variance, sdmTMB refits with a near-zero
+# spatiotemporal field turned off. In "RW RF" (no year term) a collapse in
+# every component leaves no time variation: a flat index that would score as
+# no seesaw, so it counts as a failed fit. In the other models st_collapsed
+# flags that the IID, RW, and AR1 RF variants have become the same model.
+index_ok <- function(fit, model, grid, nsplit = 2L) {
+  if (is.null(fit)) return(NULL)
+  collapsed <- all(fit$spatiotemporal == "off")
+  if (collapsed && paper_models[[model]]$year == "none") return(NULL)
+  index <- get_index_ok(fit, grid, nsplit = nsplit)
+  if (!is.null(index)) index$st_collapsed <- collapsed
+  index
+}
+
 fit_index_models <- function(data, grid, mesh, models = names(paper_models), nsplit = 2L, ...) {
-  map(set_names(models), \(m) {
-    fit <- fit_ok(fit_model(m, data = data, mesh = mesh, ...))
-    if (!is.null(fit)) get_index_ok(fit, grid, nsplit = nsplit)
-  }) |>
-    compact() |>
-    bind_rows(.id = "model")
+  map(set_names(models), \(m) index_ok(fit_ok(fit_model(m, data = data, mesh = mesh, ...)), m, grid, nsplit)) |>
+    discard(is.null) |>
+    bind_rows(.id = "model") |>
+    # typed, so callers' mutate() and joins still work if every model fails
+    bind_rows(tibble(model = character(), year = integer()))
 }
 
 # Skipped if `file` exists (delete it to refit). fit_species() returns NULL to
-# leave a species out (e.g., too few positive sets).
-run_case_study <- function(species, fit_species, file, n_workers) {
+# leave a species out (e.g., too few positive sets). A species that errors is
+# reported with status "error" rather than stopping the run and losing the
+# other species' fits. `designs` names the designs fit_species() returns, if
+# it returns a design column, so a design that fails for every species is
+# still counted.
+#
+# Each species is also cached in a folder named after `file`, so if the run
+# dies (e.g., a worker runs out of memory) a rerun fits only the species not
+# yet done. Errors aren't cached, so a rerun retries them.
+run_case_study <- function(species, fit_species, file, n_workers, designs = NULL) {
   if (file.exists(file)) return(invisible(NULL))
+  species_dir <- sub("\\.rds$", "", file)
+  dir.create(species_dir, showWarnings = FALSE, recursive = TRUE)
+  species_file <- \(s) file.path(species_dir, paste0(slug(s), ".rds"))
+  stopifnot(!anyDuplicated(species_file(species)))
   single_thread()
   future::plan(future::multisession, workers = n_workers)
   on.exit(future::plan(future::sequential), add = TRUE)
-  res <- furrr::future_map(set_names(species), fit_species, .options = furrr_opts()) |>
-    compact()
+  res <- furrr::future_map(set_names(species), \(s) {
+    f <- species_file(s)
+    if (file.exists(f)) return(readRDS(f))
+    out <- tryCatch(fit_species(s), error = \(e) structure(conditionMessage(e), class = "species_error"))
+    if (!inherits(out, "species_error")) saveRDS(out, f)
+    out
+  }, .options = furrr_opts())
+  errored <- keep(res, \(x) inherits(x, "species_error"))
+  if (length(errored) > 0L) {
+    cli::cli_warn("Fitting errored for {length(errored)} species")
+    iwalk(errored, \(e, s) message(s, ": ", e))
+  }
+  res <- discard(res, \(x) is.null(x) || inherits(x, "species_error"))
   indexes <- bind_rows(res, .id = "species") |>
-    select(any_of(c("species", "design", "model", "family", "year", "est", "lwr", "upr", "log_est", "se", "phase")))
-  keys <- intersect(c("species", "design", "model"), names(indexes))
-  fit_status <- expand_grid(species = names(res), design = unique(indexes$design), model = names(paper_models)) |>
+    bind_rows(tibble(species = character(), model = character(), year = integer())) |>
+    select(any_of(c(
+      "species", "design", "model", "family", "year", "est", "lwr", "upr", "log_est", "se", "phase", "st_collapsed"
+    )))
+  if (is.null(designs) && "design" %in% names(indexes)) designs <- unique(indexes$design)
+  fitted <- species[species %in% c(names(res), names(errored))]
+  fit_status <- expand_grid(species = fitted, design = designs, model = names(paper_models))
+  keys <- names(fit_status)
+  fit_status <- fit_status |>
     left_join(mutate(distinct(indexes, across(all_of(keys))), status = "ok"), by = keys) |>
-    mutate(status = coalesce(status, "failed"))
+    mutate(status = case_when(
+      !is.na(status) ~ status,
+      species %in% names(errored) ~ "error",
+      .default = "failed"
+    ))
   failed <- filter(fit_status, status != "ok")
   if (nrow(failed) > 0L) {
     cli::cli_warn("{nrow(failed)} fit(s) failed sanity checks or errored")
@@ -106,6 +152,8 @@ run_case_study <- function(species, fit_species, file, n_workers) {
   dir.create(dirname(file), showWarnings = FALSE, recursive = TRUE)
   saveRDS(list(indexes = indexes, fit_status = fit_status), file)
 }
+
+slug <- \(x) gsub("^-|-$", "", gsub("[^a-z0-9]+", "-", tolower(x)))
 
 single_thread <- function() {
   RhpcBLASctl::blas_set_num_threads(1L)

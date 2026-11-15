@@ -8,7 +8,7 @@ source(here::here("analysis/R/self-test.R"))
 source(here::here("analysis/R/survey-data.R"))
 load_surveyjoin()
 
-n_reps <- 20L
+n_reps <- 30L
 n_workers <- max(1L, min(60L, parallelly::availableCores() - 2L))
 
 # The operating model has IID spatiotemporal fields: with AR1, rho can go to

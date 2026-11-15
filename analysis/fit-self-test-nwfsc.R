@@ -1,7 +1,7 @@
 # NWFSC West Coast groundfish bottom trawl survey (WCGBTS) self-test. The
 # split is artificial: the survey samples the whole coast every year, so the
-# coast is cut at the area-weighted median latitude of the grid (fixed by
-# geometry before looking at any results) and one half is kept per occasion.
+# coast is cut at the median latitude of the tows (fixed by the design before
+# looking at any results) and one half is kept per occasion.
 # This gives a second, independent geometry (a long, narrow, along-coast
 # domain like the BC surveys) with the same species as far as possible.
 #
@@ -27,7 +27,7 @@ nwfsc_species <- c(
   "dover sole",
   "petrale sole"
 )
-n_reps <- 20L
+n_reps <- 30L
 grid_res_km <- 6 # coarsened from 2 km to cut prediction cost
 index_nsplit <- 6L # to limit peak memory per worker
 mesh_cutoff <- 15 # ~600 nodes
@@ -43,14 +43,28 @@ fits <- bind_rows(
 
 # Grid and split ------------------------------------------------------------
 
+get_nwfsc_data <- function(species) {
+  surveyjoin::get_data(species, regions = "nwfsc") |>
+    filter(.data$survey_name == .env$survey_name, effort > 0) |>
+    mutate(year = lubridate::year(lubridate::ymd(date))) |>
+    select(date, year, lon_start, lat_start, effort, catch_weight) |>
+    drop_na()
+}
+
+# The median tow latitude gives each half about the same number of tows per
+# occasion (~310 North, ~335 South), so the alternation is in region only.
+# Splitting at the area-weighted median of the grid (37.7 N) instead gave ~400
+# North and ~240 South, so sample size alternated with region. The halves
+# then differ in area (North ~38%), as the BC survey regions do.
+split_lat <- map(nwfsc_species, get_nwfsc_data) |>
+  bind_rows() |>
+  distinct(date, lon_start, lat_start) |>
+  pull(lat_start) |>
+  median()
+cli::cli_inform("Splitting north / south at {round(split_lat, 2)} degrees N")
+
 grid_fine <- surveyjoin::nwfsc_grid |>
   filter(survey == survey_name, area > 0)
-
-split_lat <- with(grid_fine, {
-  o <- order(lat)
-  lat[o][which(cumsum(area[o]) >= sum(area) / 2)[1L]]
-})
-cli::cli_inform("Splitting north / south at {round(split_lat, 2)} degrees N")
 
 # Assign the half at 2 km, then aggregate within each half so no coarse cell
 # straddles the split
@@ -64,11 +78,8 @@ base_grid <- grid_fine |>
 
 # Time is survey occasion because there was no survey in 2020
 prepare_species_data <- function(species) {
-  surveyjoin::get_data(species, regions = "nwfsc") |>
-    filter(.data$survey_name == .env$survey_name, effort > 0) |>
-    mutate(year = lubridate::year(lubridate::ymd(date))) |>
-    select(year, lon_start, lat_start, effort, catch_weight) |>
-    drop_na() |>
+  get_nwfsc_data(species) |>
+    select(-date) |>
     mutate(
       region = if_else(lat_start >= split_lat, "North", "South"),
       occasion = match(year, sort(unique(year))),

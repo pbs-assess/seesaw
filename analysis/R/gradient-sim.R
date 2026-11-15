@@ -6,7 +6,7 @@ source(here::here("analysis/R/models.R"))
 
 gradient_deltas <- c(0, 0.5, 1, 2) # 0 = no regional contrast (control)
 gradient_sigma_Os <- c(1, 2, 4)
-gradient_seeds <- seq_len(50L)
+gradient_seeds <- seq_len(100L)
 gradient_models <- c("IID RF, factor(year)", "IID RF, RW year")
 
 gradient_n_year <- 12L
@@ -82,6 +82,10 @@ fit_gradient_model <- function(model, d, mesh) {
 
 run_gradient_task <- function(delta, sigma_O, seed, return_fits = FALSE) {
   single_thread()
+  # The grid runs in furrr workers, which use L'Ecuyer-CMRG; pinning it here
+  # gives the same draws from the main session (fit-gradient-example.R)
+  old_kind <- RNGkind("L'Ecuyer-CMRG")
+  on.exit(RNGkind(old_kind[1L]), add = TRUE)
   s <- simulate_gradient(delta, sigma_O, seed, make_square_mesh(gradient_grid, max_edge = 0.02))
   truth <- summarise(s, true_est = sum(mu), .by = year)
   d <- observe_alternating(s, seed)
