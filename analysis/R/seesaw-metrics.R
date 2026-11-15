@@ -73,12 +73,24 @@ year_to_year_sd_ratio <- function(est, true) {
 # Self-tests -----------------------------------------------------------------
 
 # Compare fits on the same simulated populations. Filter `fit_status` to the
-# fits a figure uses first.
-common_replicates <- function(indexes, fit_status) {
-  keep <- fit_status |>
-    filter(all(status == "ok"), .by = c(species, rep)) |>
-    distinct(species, rep)
-  n_dropped <- nrow(distinct(fit_status, species, rep)) - nrow(keep)
+# fits a figure uses first. Replicates are dropped per species, so one species'
+# failures cost the others nothing. A species with fewer than `min_complete` of
+# its replicates complete is dropped entirely: its few survivors are likely the
+# easy draws and would misrepresent it.
+common_replicates <- function(indexes, fit_status, min_complete = 0.5) {
+  by_rep <- fit_status |>
+    summarise(complete = all(status == "ok"), .by = c(species, rep))
+  by_species <- summarise(by_rep, frac = mean(complete), .by = species)
+  dropped_species <- filter(by_species, frac < min_complete)
+  if (nrow(dropped_species) > 0L) {
+    cli::cli_inform(c(
+      "Dropped {nrow(dropped_species)} species with < {100 * min_complete}% complete replicates:",
+      set_names(sprintf("%s (%.0f%%)", dropped_species$species, 100 * dropped_species$frac), "*")
+    ))
+  }
+  by_rep <- filter(by_rep, !species %in% dropped_species$species)
+  keep <- filter(by_rep, complete)
+  n_dropped <- sum(!by_rep$complete)
   if (n_dropped > 0L) cli::cli_inform("Dropped {n_dropped} species x replicate(s) with a failed fit")
   semi_join(indexes, keep, by = c("species", "rep"))
 }

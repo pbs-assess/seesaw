@@ -12,8 +12,9 @@ inside_legend_x <- 0.71
 norway <- readRDS(here::here("data-generated/case-study-norway.rds"))$indexes |>
   filter(model %in% norway_models) |>
   mutate(data = norway_data[design]) |>
-  # only species fit under both designs (lemon sole fails on the alternating data)
-  filter(n_distinct(data) == 2L, .by = c(species, model)) |>
+  # only species with every model fit under both designs, so both panels show
+  # the same species
+  filter(n_distinct(data, model) == length(norway_data) * length(norway_models), .by = species) |>
   mutate(
     model = factor(model, levels = norway_models),
     data = factor(data, levels = norway_data)
