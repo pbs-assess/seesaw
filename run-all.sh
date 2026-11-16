@@ -32,6 +32,7 @@ fits=(
   fit-case-study-goa-bc-trawl
   fit-case-study-bc-longline
   fit-case-study-norway
+  fit-norway-subarea
   fit-gradient-grid
   fit-gradient-example
   fit-prior-sensitivity
@@ -47,6 +48,7 @@ figs=(
   fig-sampling-designs
   fig-prior-sensitivity
   fig-gradient-grid
+  fig-timing
 )
 
 run() {

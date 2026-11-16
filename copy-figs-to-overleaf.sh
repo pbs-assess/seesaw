@@ -16,6 +16,7 @@ figs=(
   prior-sensitivity-densities
   prior-sensitivity-indexes
   gradient-grid
+  timing
 )
 for f in "${figs[@]}"; do
   cp -v "figs/$f.pdf" "$dest/"
