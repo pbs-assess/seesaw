@@ -56,8 +56,7 @@ g_norway_A <- ggplot(norway_A, aes(A_max, species)) +
   scale_y_discrete(drop = FALSE) +
   scale_colour_manual(values = norway_colours) +
   labs(
-    x = paste0("Maximum biennial amplitude (%) across ", norway_window, "-year windows"), y = NULL, colour = NULL,
-    title = "Norwegian gillnet–fyke net"
+    x = paste0("Maximum biennial amplitude (%) across ", norway_window, "-year windows"), y = NULL, colour = NULL
   )
 
 # The three most abundant fitted stocks: a typical seesaw that the full years
@@ -67,9 +66,16 @@ norway_ts_species <- c("Pollack", "Atlantic cod", "Saithe")
 
 # Rows b and c plot log10 by hand rather than use scale_y_log10(), which would
 # turn the shading's -Inf into NaN; the axis is labelled on the original scale
+# Round values within each panel's range, thinned when the range is wide
+relative_breaks <- function(lims) {
+  b <- c(0.3, 0.5, 0.7, 1, 1.5, 2, 3)
+  b <- b[b >= 10^lims[1] & b <= 10^lims[2]]
+  if (length(b) > 5) b <- intersect(b, c(0.3, 0.5, 1, 2, 3))
+  log10(b)
+}
 log10_axis <- scale_y_continuous(
-  breaks = \(lims) log10(scales::breaks_log()(10^lims)),
-  labels = \(b) scales::label_number()(10^b)
+  breaks = relative_breaks,
+  labels = \(b) as.character(signif(10^b, 2))
 )
 both_sampled <- list(
   geom_rect(
@@ -98,7 +104,7 @@ g_norway_ts <- norway |>
   log10_axis +
   scale_colour_manual(values = norway_colours) +
   scale_x_continuous(breaks = c(2015, 2020, 2025)) +
-  labs(x = NULL, y = "Relative biomass index", colour = NULL, fill = NULL, title = "IID RF, factor(year)")
+  labs(x = NULL, y = "Biomass index", colour = NULL, fill = NULL)
 
 # Only the years each subarea was sampled. Relative to each species' geometric
 # mean across both subareas, so the North-South gap is kept.
@@ -116,7 +122,7 @@ g_subarea <- readRDS(here::here("data-generated/norway-subarea.rds")) |>
   log10_axis +
   scale_colour_manual(values = subarea_colours) +
   scale_x_continuous(breaks = c(2015, 2020, 2025)) +
-  labs(x = NULL, y = "Relative biomass index", colour = NULL, fill = NULL, title = "Biomass by subarea")
+  labs(x = NULL, y = "Biomass index", colour = NULL, fill = NULL)
 
 # Mini map of the sites, coloured by subarea as in row c, in the same
 # projection as the Norway map in fig-case-study-maps.R
@@ -133,7 +139,7 @@ norway_sites <- readRDS(here::here("data-raw/garn_ruse_predgrid.rds")) |>
   distinct(site, subarea, lon, lat) |>
   st_as_sf(coords = c("lon", "lat"), crs = 4326) |>
   st_transform(crs_no)
-map_lims <- st_bbox(c(xmin = 3.4, xmax = 16.3, ymin = 61.9, ymax = 68.3), crs = 4326) |>
+map_lims <- st_bbox(c(xmin = 3.4, xmax = 16.3, ymin = 61.6, ymax = 68.7), crs = 4326) |>
   st_as_sfc() |>
   st_segmentize(0.1) |>
   st_transform(crs_no) |>
@@ -143,7 +149,7 @@ map_labels <- tribble(
   ~label, ~lon, ~lat, ~kind,
   "North", 10.9, 65.9, "survey",
   "South", 5.7, 63.6, "survey",
-  "Norway", 13.0, 64.4, "place"
+  "Norway", 13.8, 64.4, "place"
 )
 map_xy <- st_coordinates(st_transform(st_as_sf(map_labels, coords = c("lon", "lat"), crs = 4326), crs_no))
 map_labels <- mutate(map_labels, X = map_xy[, 1], Y = map_xy[, 2])
@@ -166,7 +172,7 @@ g_map <- ggplot() +
   ) +
   scale_x_continuous(breaks = seq(4, 16, 4)) +
   scale_y_continuous(breaks = seq(62, 68, 2)) +
-  labs(x = NULL, y = NULL, title = "Sampling sites") +
+  labs(x = NULL, y = NULL) +
   theme(
     axis.text = element_text(size = rel(0.7)),
     panel.grid = element_line(colour = "grey92")
@@ -174,22 +180,20 @@ g_map <- ggplot() +
 
 # Nesting the map and panel b keeps row a's long species names from setting the
 # left edge of rows b and c
-row_rule <- wrap_elements(
-  full = grid::linesGrob(y = 0.5, gp = grid::gpar(col = "grey85")),
-  ignore_tag = TRUE
-)
 row_a <- (g_map | g_norway_A) +
-  plot_layout(widths = c(1.7, 4.5))
-g <- (row_a / row_rule / g_norway_ts / row_rule / g_subarea) +
-  plot_layout(heights = c(0.75, 0.01, 0.85, 0.01, 0.85)) +
+  plot_layout(widths = c(1.33, 4.5))
+# Space after the y title moves the panels below right, to line up with the map
+y_title_gap <- theme(axis.title.y = element_text(margin = margin(r = 3)))
+g <- (row_a / (g_norway_ts + y_title_gap) / (g_subarea + y_title_gap)) +
+  plot_layout(heights = c(0.75, 0.85, 0.85)) +
   plot_annotation(tag_levels = "a") &
-  # tags inside each plot's area, beside the title, rather than in an extra
+  # tags inside each plot's area rather than in an extra
   # row above and column to the left
   theme(
-    plot.title = element_text(size = rel(0.9)),
+    axis.title = element_text(size = rel(0.9)),
     plot.tag.location = "plot",
     plot.tag.position = c(0, 1),
-    plot.tag = element_text(hjust = 0, vjust = 1, margin = margin(t = -1)),
+    plot.tag = element_text(hjust = 0, vjust = 1),
     plot.margin = margin(5.5, 5.5, 5.5, 2)
   )
-ggsave(here::here("figs/norway-full-coverage.pdf"), g, width = 7.45, height = 6.95, device = cairo_pdf)
+ggsave(here::here("figs/norway-full-coverage.pdf"), g, width = 7.83, height = 5.99, device = cairo_pdf)
