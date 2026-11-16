@@ -10,7 +10,7 @@ load_surveyjoin()
 # +0.5 = WCHG + WCVI years
 goa_bc_trawl_phase <- \(year) ifelse(year %% 2 == 0, 0.5, -0.5)
 
-fit_goa_bc_trawl <- function(species) {
+fit_goa_bc_trawl <- function(species, model) {
   single_thread()
   dat <- surveyjoin::get_data(species, regions = c("pbs", "afsc")) |>
     mutate(year = lubridate::year(lubridate::ymd(date))) |>
@@ -38,6 +38,7 @@ fit_goa_bc_trawl <- function(species) {
   mesh <- make_mesh(dat, c("X", "Y"), cutoff = 20)
 
   fit_index_models(
+    models = model,
     data = dat, grid = grid, mesh = mesh,
     response = "catch_weight",
     family = delta_gamma(type = "poisson-link"),
@@ -51,5 +52,5 @@ fit_goa_bc_trawl <- function(species) {
 run_case_study(
   trawl_species, fit_goa_bc_trawl,
   file = here::here("data-generated/case-study-goa-bc-trawl.rds"),
-  n_workers = min(length(trawl_species), parallelly::availableCores() / 2)
+  n_workers = min(40L, parallelly::availableCores())
 )

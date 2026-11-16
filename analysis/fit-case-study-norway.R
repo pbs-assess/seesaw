@@ -6,7 +6,7 @@
 source(here::here("analysis/R/models.R"))
 source(here::here("analysis/R/norway-data.R"))
 
-fit_norway <- function(species) {
+fit_norway <- function(species, model) {
   single_thread()
   dat_all <- filter(sets, englishname == species)
   dat_alt <- filter(dat_all, is_alternating(dat_all))
@@ -19,6 +19,7 @@ fit_norway <- function(species) {
   imap(designs, \(x, design) {
     set_worker_log(label = paste0(species, " [", design, "]"))
     fit_index_models(
+      models = model,
       data = x$dat, mesh = x$mesh,
       grid = replicate_df(grid0, "year", sort(unique(x$dat$year))),
       response = "catch_weight",
@@ -44,6 +45,6 @@ norway_species <- sets |>
 run_case_study(
   norway_species, fit_norway,
   file = here::here("data-generated/case-study-norway.rds"),
-  n_workers = min(length(norway_species), parallelly::availableCores() / 2),
+  n_workers = min(70L, parallelly::availableCores()),
   designs = c("alternating", "all")
 )

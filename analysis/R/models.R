@@ -148,72 +148,85 @@ fit_index_models <- function(data, grid, mesh, models = names(paper_models), nsp
     bind_rows(tibble(model = character(), year = integer()))
 }
 
-# Skipped if `file` exists (delete it to refit). fit_species() returns NULL to
-# leave a species out (e.g., too few positive sets). A species that errors is
-# reported with status "error" rather than stopping the run and losing the
-# other species' fits. `designs` names the designs fit_species() returns, if
-# it returns a design column, so a design that fails for every species is
-# still counted.
+# Skipped if `file` exists (delete it to refit). fit_species(species, model)
+# fits one model and returns its index rows, or NULL to leave a species out
+# (e.g., too few positive sets). A task that errors is reported with status
+# "error" rather than stopping the run and losing the other fits. `designs`
+# names the designs fit_species() returns, if it returns a design column, so a
+# design that fails for every species is still counted.
 #
-# Each species is also cached in a folder named after `file`, so if the run
-# dies (e.g., a worker runs out of memory) a rerun fits only the species not
+# The unit of work is a species x model, so all the workers stay busy until the
+# last few fits. Each task is cached in a folder named after `file`, so if the
+# run dies (e.g., a worker runs out of memory) a rerun fits only the tasks not
 # yet done. Errors aren't cached, so a rerun retries them.
 run_case_study <- function(species, fit_species, file, n_workers, designs = NULL) {
   if (file.exists(file)) return(invisible(NULL))
-  species_dir <- sub("\\.rds$", "", file)
-  dir.create(species_dir, showWarnings = FALSE, recursive = TRUE)
-  species_file <- \(s) file.path(species_dir, paste0(slug(s), ".rds"))
-  stopifnot(!anyDuplicated(species_file(species)))
-  log_file <- progress_log(basename(species_dir))
-  n_cached <- sum(file.exists(species_file(species)))
+  task_dir <- sub("\\.rds$", "", file)
+  dir.create(task_dir, showWarnings = FALSE, recursive = TRUE)
+  # The slowest models (the last in paper_models) go first so that the quick
+  # ones fill in at the end
+  tasks <- expand_grid(model = rev(names(paper_models)), species = species) |>
+    mutate(file = file.path(task_dir, paste0(slug(species), "__", slug(model), ".rds")))
+  stopifnot(!anyDuplicated(tasks$file))
+  log_file <- progress_log(basename(task_dir))
+  n_cached <- sum(file.exists(tasks$file))
+  n_workers <- min(n_workers, max(1L, nrow(tasks) - n_cached))
   log_progress(
-    log_file, "=== run started: ", length(species), " species (", n_cached, " cached), ", n_workers, " workers ==="
+    log_file, "=== run started: ", nrow(tasks), " species x model tasks (", n_cached, " cached), ",
+    n_workers, " workers ==="
   )
   single_thread()
   future::plan(future::multisession, workers = n_workers)
   on.exit(future::plan(future::sequential), add = TRUE)
-  res <- furrr::future_map(set_names(species), \(s) {
-    f <- species_file(s)
-    if (file.exists(f)) return(readRDS(f))
-    set_worker_log(log_file, s)
-    log_worker("started")
+  # scheduling = Inf hands each task to the next free worker rather than
+  # splitting the tasks into fixed chunks up front
+  res <- furrr::future_pmap(tasks, \(model, species, file) {
+    if (file.exists(file)) return(readRDS(file))
+    set_worker_log(log_file, species)
+    log_worker(model, " started")
     tic()
-    out <- tryCatch(fit_species(s), error = \(e) structure(conditionMessage(e), class = "species_error"))
+    out <- tryCatch(
+      fit_species(species, model),
+      error = \(e) structure(conditionMessage(e), class = "task_error")
+    )
     secs <- toc_secs()
-    if (inherits(out, "species_error")) {
-      log_worker("ERROR: ", out)
+    if (inherits(out, "task_error")) {
+      log_worker(model, " ERROR: ", out)
     } else {
-      saveRDS(out, f)
-      n_done <- sum(file.exists(species_file(species)))
-      what <- if (is.null(out)) "skipped" else paste(n_distinct(out[intersect(c("design", "model"), names(out))]), "fits ok")
-      log_worker("done, ", what, " [", fmt_secs(secs), "] (", n_done, "/", length(species), " species done)")
+      saveRDS(out, file)
+      n_done <- sum(file.exists(tasks$file))
+      log_worker(model, " done [", fmt_secs(secs), "] (", n_done, "/", nrow(tasks), " tasks done)")
     }
     out
-  }, .options = furrr_opts())
+  }, .options = furrr_opts(scheduling = Inf))
   log_progress(log_file, "=== run finished ===")
-  errored <- keep(res, \(x) inherits(x, "species_error"))
-  if (length(errored) > 0L) {
-    cli::cli_warn("Fitting errored for {length(errored)} species")
-    iwalk(errored, \(e, s) message(s, ": ", e))
+  tasks$result <- res
+  is_error <- map_lgl(res, \(x) inherits(x, "task_error"))
+  errored <- tasks[is_error, ]
+  if (nrow(errored) > 0L) {
+    cli::cli_warn("Fitting errored for {nrow(errored)} task(s)")
+    pwalk(errored, \(species, model, result, ...) message(species, " [", model, "]: ", result))
   }
-  res <- discard(res, \(x) is.null(x) || inherits(x, "species_error"))
-  indexes <- bind_rows(res, .id = "species") |>
+  done <- tasks[!is_error & !map_lgl(res, is.null), ]
+  indexes <- done$result |>
+    set_names(done$species) |>
+    bind_rows(.id = "species") |>
     bind_rows(tibble(species = character(), model = character(), year = integer())) |>
     select(any_of(c(
       "species", "design", "model", "family", "year", "est", "lwr", "upr", "log_est", "se", "phase", "st_collapsed",
       "fit_time", "index_time"
     )))
   if (is.null(designs) && "design" %in% names(indexes)) designs <- unique(indexes$design)
-  fitted <- species[species %in% c(names(res), names(errored))]
+  fitted <- unique(c(done$species, errored$species))
   fit_status <- expand_grid(species = fitted, design = designs, model = names(paper_models))
   keys <- names(fit_status)
   fit_status <- fit_status |>
     left_join(mutate(distinct(indexes, across(all_of(keys))), status = "ok"), by = keys) |>
-    mutate(status = case_when(
-      !is.na(status) ~ status,
-      species %in% names(errored) ~ "error",
-      .default = "failed"
-    ))
+    left_join(transmute(errored, species, model, errored = TRUE), by = c("species", "model")) |>
+    mutate(
+      status = case_when(!is.na(status) ~ status, !is.na(errored) ~ "error", .default = "failed"),
+      errored = NULL
+    )
   failed <- filter(fit_status, status != "ok")
   if (nrow(failed) > 0L) {
     cli::cli_warn("{nrow(failed)} fit(s) failed sanity checks or errored")

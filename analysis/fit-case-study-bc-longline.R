@@ -60,28 +60,47 @@ longline_species <- c(
 )
 stopifnot(all(longline_species %in% sets$species_common_name))
 
-fit_bc_longline <- function(species) {
-  single_thread()
+longline_fit_args <- function(species) {
   dat <- sets |>
     filter(species_common_name == species) |>
     add_utm_columns(c("longitude", "latitude"), utm_crs = 3156)
-  grid <- replicate_df(grid0, "year", sort(unique(dat$year)))
   mesh <- make_mesh(dat, c("X", "Y"), cutoff = 10)
-  fit_args <- list(data = dat, mesh = mesh, response = "catch_count", offset = dat$offset)
+  list(data = dat, mesh = mesh, response = "catch_count", offset = dat$offset)
+}
 
-  # NB1 or NB2 by AIC on IID RF, factor(year), preferring fits that pass
-  # sanity checks
-  families <- list(nbinom1 = nbinom1(), nbinom2 = nbinom2())
+families <- list(nbinom1 = nbinom1(), nbinom2 = nbinom2())
+
+# NB1 or NB2 by AIC on IID RF, factor(year), preferring fits that pass sanity
+# checks. Chosen once per species, up front, so the species x model tasks agree.
+choose_family <- function(species) {
+  single_thread()
+  fit_args <- longline_fit_args(species)
   candidates <- families |>
     map(\(f) tryCatch(do.call(fit_model, c(list("IID RF, factor(year)", family = f), fit_args)), error = \(e) NULL)) |>
     compact()
-  if (length(candidates) == 0L) return(NULL)
+  if (length(candidates) == 0L) return(NA_character_)
   converged <- compact(lapply(candidates, \(f) fit_ok(f)))
   pool <- if (length(converged) > 0L) converged else candidates
-  family_name <- names(pool)[which.min(map_dbl(pool, AIC))]
-  log_worker("family ", family_name)
+  names(pool)[which.min(map_dbl(pool, AIC))]
+}
 
-  do.call(fit_index_models, c(list(grid = grid, family = families[[family_name]]), fit_args)) |>
+family_file <- here::here("data-generated/case-study-bc-longline-family.rds")
+if (!file.exists(family_file) && !file.exists(here::here("data-generated/case-study-bc-longline.rds"))) {
+  future::plan(future::multisession, workers = min(70L, length(longline_species), parallelly::availableCores()))
+  family_choice <- furrr::future_map_chr(set_names(longline_species), choose_family, .options = furrr_opts(scheduling = Inf))
+  future::plan(future::sequential)
+  saveRDS(family_choice, family_file)
+}
+
+fit_bc_longline <- function(species, model) {
+  single_thread()
+  family_name <- readRDS(family_file)[[species]]
+  # no fit in either family
+  if (is.na(family_name)) return(NULL)
+  fit_args <- longline_fit_args(species)
+  grid <- replicate_df(grid0, "year", sort(unique(fit_args$data$year)))
+
+  do.call(fit_index_models, c(list(models = model, grid = grid, family = families[[family_name]]), fit_args)) |>
     left_join(hbll_phase, by = "year") |>
     mutate(family = family_name)
 }
@@ -89,5 +108,5 @@ fit_bc_longline <- function(species) {
 run_case_study(
   longline_species, fit_bc_longline,
   file = here::here("data-generated/case-study-bc-longline.rds"),
-  n_workers = min(length(longline_species), 60L, parallelly::availableCores())
+  n_workers = min(70L, parallelly::availableCores())
 )

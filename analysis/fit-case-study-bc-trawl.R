@@ -9,7 +9,7 @@ load_surveyjoin()
 # +0.5 = WCHG + WCVI years
 bc_trawl_phase <- \(year) ifelse(year %% 2 == 0, 0.5, -0.5)
 
-fit_bc_trawl <- function(species) {
+fit_bc_trawl <- function(species, model) {
   single_thread()
   dat <- surveyjoin::get_data(species, regions = "pbs") |>
     mutate(year = lubridate::year(lubridate::ymd(date))) |>
@@ -30,6 +30,7 @@ fit_bc_trawl <- function(species) {
   mesh <- make_mesh(dat, c("X", "Y"), cutoff = 10)
 
   fit_index_models(
+    models = model,
     data = dat, grid = grid, mesh = mesh,
     response = "catch_weight",
     family = delta_gamma(type = "poisson-link"),
@@ -41,5 +42,5 @@ fit_bc_trawl <- function(species) {
 run_case_study(
   trawl_species, fit_bc_trawl,
   file = here::here("data-generated/case-study-bc-trawl.rds"),
-  n_workers = min(length(trawl_species), 60L, parallelly::availableCores())
+  n_workers = min(70L, parallelly::availableCores())
 )

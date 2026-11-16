@@ -12,7 +12,7 @@ load_surveyjoin()
 # had continued, so it is the same as in the biennial fits
 bc_trawl_phase <- \(year) ifelse(year %% 2 == 0, 0.5, -0.5)
 
-fit_bc_trawl_all <- function(species) {
+fit_bc_trawl_all <- function(species, model) {
   single_thread()
   dat_all <- surveyjoin::get_data(species, regions = "pbs") |>
     mutate(year = lubridate::year(lubridate::ymd(date))) |>
@@ -35,6 +35,7 @@ fit_bc_trawl_all <- function(species) {
     replicate_df("year", sort(unique(dat_all$year)))
 
   fit_index_models(
+    models = model,
     data = dat_all, grid = grid, mesh = mesh_all,
     response = "catch_weight",
     family = delta_gamma(type = "poisson-link"),
@@ -46,5 +47,5 @@ fit_bc_trawl_all <- function(species) {
 run_case_study(
   trawl_species, fit_bc_trawl_all,
   file = here::here("data-generated/case-study-bc-trawl-all.rds"),
-  n_workers = min(length(trawl_species), 60L, parallelly::availableCores())
+  n_workers = min(70L, parallelly::availableCores())
 )
