@@ -29,6 +29,7 @@ done
 
 fits=(
   fit-case-study-bc-trawl
+  fit-case-study-bc-trawl-all
   fit-case-study-goa-bc-trawl
   fit-case-study-bc-longline
   fit-case-study-norway
