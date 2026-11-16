@@ -80,9 +80,11 @@ log10_axis <- scale_y_continuous(
 both_sampled <- list(
   geom_rect(
     aes(xmin = xmin, xmax = xmax, fill = fill),
-    data = tibble(xmin = 2023.5, xmax = 2026.5, fill = "Both regions sampled"),
+    data = tibble(xmin = 2023.5, xmax = Inf, fill = "Both regions sampled"),
     ymin = -Inf, ymax = Inf, inherit.aes = FALSE
   ),
+  # a layer rather than theme grid lines, which the shading would hide
+  geom_vline(xintercept = 2013:2026, colour = "grey85", linewidth = 0.2),
   scale_fill_manual(values = c("Both regions sampled" = "grey92")),
   guides(colour = guide_legend(order = 1), fill = guide_legend(order = 2)),
   theme(legend.spacing.y = unit(0, "pt"), legend.margin = margin(2, 0, 2, 0))
@@ -91,15 +93,16 @@ both_sampled <- list(
 # Each series relative to its geometric mean
 g_norway_ts <- norway |>
   filter(model == norway_models[1], species %in% norway_ts_species) |>
-  mutate(
-    species = factor(species, levels = norway_ts_species),
-    rel_est = est / exp(mean(log(est))),
-    .by = c(species, data)
-  ) |>
-  ggplot(aes(year, log10(rel_est), colour = data)) +
+  mutate(species = factor(species, levels = norway_ts_species)) |>
+  mutate(across(c(est, lwr, upr), \(x) x / exp(mean(log(est)))), .by = c(species, data)) |>
+  ggplot(aes(year, log10(est), colour = data)) +
   both_sampled +
+  # fill from the colour scale, since the shading already uses the fill scale
+  geom_ribbon(
+    aes(ymin = log10(lwr), ymax = log10(upr), fill = after_scale(alpha(colour, 0.1))),
+    linetype = "blank", show.legend = FALSE
+  ) +
   geom_line() +
-  geom_point() +
   facet_wrap(~species, scales = "free_y") +
   log10_axis +
   scale_colour_manual(values = norway_colours) +
@@ -115,9 +118,13 @@ g_subarea <- readRDS(here::here("data-generated/norway-subarea.rds")) |>
   mutate(across(c(est, lwr, upr), \(x) x / exp(mean(log(est)))), .by = species) |>
   ggplot(aes(year, log10(est), colour = subarea)) +
   both_sampled +
-  geom_linerange(aes(ymin = log10(lwr), ymax = log10(upr)), position = position_dodge(width = 0.4), alpha = 0.6) +
-  geom_line(position = position_dodge(width = 0.4)) +
-  geom_point(position = position_dodge(width = 0.4)) +
+  # fill from the colour scale, since the shading already uses the fill scale
+  geom_ribbon(
+    aes(ymin = log10(lwr), ymax = log10(upr), fill = after_scale(alpha(colour, 0.13))),
+    linetype = "blank", show.legend = FALSE
+  ) +
+  geom_line() +
+  geom_point() +
   facet_wrap(~species, scales = "free_y") +
   log10_axis +
   scale_colour_manual(values = subarea_colours) +
