@@ -163,10 +163,14 @@ run_case_study <- function(species, fit_species, file, n_workers, designs = NULL
   if (file.exists(file)) return(invisible(NULL))
   task_dir <- sub("\\.rds$", "", file)
   dir.create(task_dir, showWarnings = FALSE, recursive = TRUE)
-  # The slowest models (the last in paper_models) go first so that the quick
-  # ones fill in at the end
-  tasks <- expand_grid(model = rev(names(paper_models)), species = species) |>
-    mutate(file = file.path(task_dir, paste0(slug(species), "__", slug(model), ".rds")))
+  # Slowest models first (by self-test fit times) so the quick ones fill in at
+  # the end
+  slowest_first <- c(
+    "AR1 RF, RW year", "RW RF, RW year", "RW RF", "IID RF, factor(year)", "IID RF, RW year"
+  )
+  stopifnot(setequal(slowest_first, names(paper_models)))
+  tasks <- expand_grid(model = slowest_first, species = species) |>
+    mutate(file = case_study_task_file(file, species, model))
   stopifnot(!anyDuplicated(tasks$file))
   log_file <- progress_log(basename(task_dir))
   n_cached <- sum(file.exists(tasks$file))
@@ -237,6 +241,12 @@ run_case_study <- function(species, fit_species, file, n_workers, designs = NULL
 }
 
 slug <- \(x) gsub("^-|-$", "", gsub("[^a-z0-9]+", "-", tolower(x)))
+
+# Where run_case_study() caches one species x model fit for the case study
+# saved to `file`
+case_study_task_file <- function(file, species, model) {
+  file.path(sub("\\.rds$", "", file), paste0(slug(species), "__", slug(model), ".rds"))
+}
 
 single_thread <- function() {
   RhpcBLASctl::blas_set_num_threads(1L)

@@ -84,17 +84,44 @@ choose_family <- function(species) {
   names(pool)[which.min(map_dbl(pool, AIC))]
 }
 
+case_file <- here::here("data-generated/case-study-bc-longline.rds")
 family_file <- here::here("data-generated/case-study-bc-longline-family.rds")
-if (!file.exists(family_file) && !file.exists(here::here("data-generated/case-study-bc-longline.rds"))) {
-  future::plan(future::multisession, workers = min(70L, length(longline_species), parallelly::availableCores()))
-  family_choice <- furrr::future_map_chr(set_names(longline_species), choose_family, .options = furrr_opts(scheduling = Inf))
-  future::plan(future::sequential)
-  saveRDS(family_choice, family_file)
+
+# A species' family can be read back from any of its cached fits, so a rerun
+# (or caches split by convert-case-study-caches.R) doesn't redo the choice
+cached_family <- function(species) {
+  files <- case_study_task_file(case_file, species, names(paper_models))
+  family <- files[file.exists(files)] |>
+    map(\(f) readRDS(f)$family) |>
+    unlist() |>
+    unique()
+  if (length(family) == 0L) NA_character_ else family[[1]]
+}
+
+# Only species with fits left to do need a family. Choices made here are saved
+# to family_file in case the run dies before any of the species' fits are cached.
+family_choice <- character()
+if (!file.exists(case_file)) {
+  if (file.exists(family_file)) family_choice <- readRDS(family_file)
+  has_fits_left <- \(s) !all(file.exists(case_study_task_file(case_file, s, names(paper_models))))
+  need_family <- longline_species |>
+    keep(has_fits_left) |>
+    discard(\(s) s %in% names(family_choice))
+  from_cache <- map_chr(set_names(need_family), cached_family)
+  family_choice <- c(family_choice, from_cache[!is.na(from_cache)])
+  to_choose <- names(from_cache)[is.na(from_cache)]
+  if (length(to_choose) > 0L) {
+    future::plan(future::multisession, workers = min(70L, length(to_choose), parallelly::availableCores()))
+    chosen <- furrr::future_map_chr(set_names(to_choose), choose_family, .options = furrr_opts(scheduling = Inf))
+    future::plan(future::sequential)
+    family_choice <- c(family_choice, chosen)
+    saveRDS(family_choice, family_file)
+  }
 }
 
 fit_bc_longline <- function(species, model) {
   single_thread()
-  family_name <- readRDS(family_file)[[species]]
+  family_name <- family_choice[[species]]
   # no fit in either family
   if (is.na(family_name)) return(NULL)
   fit_args <- longline_fit_args(species)
@@ -107,6 +134,6 @@ fit_bc_longline <- function(species, model) {
 
 run_case_study(
   longline_species, fit_bc_longline,
-  file = here::here("data-generated/case-study-bc-longline.rds"),
+  file = case_file,
   n_workers = min(70L, parallelly::availableCores())
 )
